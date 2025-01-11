@@ -7,7 +7,7 @@ const HowItWorks = () => {
     {
       icon: <FiUpload />,
       title: 'העלה את החומר',
-      description: 'העלה קובץ PDF, הקלטה או קישור לטיוטוב',
+      description: 'העלה קובץ PDF, הקלטה או קישור ליוטיוב',
       number: '1'
     },
     {
@@ -42,7 +42,7 @@ const HowItWorks = () => {
       
       <div className="flex justify-center">
         <button className="cta-button px-6 py-3 text-base font-medium bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 w-64">
-          תתחיל ללמוד קשה →
+          תפסיק ללמוד קשה →
         </button>
       </div>
     </section>

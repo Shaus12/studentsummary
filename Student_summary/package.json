@@ -10,17 +10,26 @@
     "transcribe": "node transcribeAndSumm.js"
   },
   "dependencies": {
+    "@emotion/cache": "^11.14.0",
+    "@emotion/react": "^11.11.3",
+    "@emotion/styled": "^11.11.0",
+    "@fontsource/roboto": "^5.1.1",
+    "@mui/material": "^5.15.11",
     "@pdf-lib/fontkit": "^1.1.1",
     "@react-oauth/google": "^0.12.1",
     "axios": "^1.7.9",
     "fontkit": "^2.0.4",
     "fs": "^0.0.1-security",
+    "lucide-react": "^0.471.0",
     "openai": "^4.77.0",
     "pdf-lib": "^1.17.1",
+    "prop-types": "^15.8.1",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
     "react-icons": "^4.12.0",
-    "react-router-dom": "^7.1.1"
+    "react-router-dom": "^7.1.1",
+    "stylis": "^4.3.4",
+    "stylis-plugin-rtl": "^2.1.1"
   },
   "devDependencies": {
     "@types/react": "^18.2.43",

@@ -5,14 +5,18 @@ import HowItWorks from '../components/HowItWorks';
 import ComparisonTable from '../components/ComparisonTable';
 import StudentStories from '../components/StudentStories';
 import Footer from '../components/Footer';
+import ThenVsToday from '../components/ThenVsToday';
 
 const Home = () => {
   return (
     <div>
-      <Hero />
+      <div className="bg-white">
+        <Hero />
+      </div>
       <Features />
       <HowItWorks />
       <ComparisonTable />
+      <ThenVsToday />
       <StudentStories />
       <Footer />
     </div>

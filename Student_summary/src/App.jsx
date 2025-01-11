@@ -6,21 +6,23 @@ import Home from './pages/Home';
 import Login from './pages/Login';
 import SignUp from './pages/SignUp';
 import SignupSuccess from './pages/SignupSuccess';
+import YouTubeSummarizer from './pages/YouTubeSummarizer';
 
 function App() {
   return (
     <GoogleOAuthProvider clientId="223517881477-ncfrafhp355dj8c3rc99a124jrgnf4f1.apps.googleusercontent.com">
       <Router>
-        <div className="min-h-screen bg-white">
+        <div className="min-h-screen w-full bg-[#f0f4ff]">
           <Navbar />
-          <div className="pt-16">
+          <main className="flex-grow pt-16">
             <Routes>
               <Route path="/" element={<Home />} />
               <Route path="/login" element={<Login />} />
               <Route path="/signup" element={<SignUp />} />
               <Route path="/signup-success" element={<SignupSuccess />} />
+              <Route path="/youtube-summary" element={<YouTubeSummarizer />} />
             </Routes>
-          </div>
+          </main>
         </div>
       </Router>
     </GoogleOAuthProvider>

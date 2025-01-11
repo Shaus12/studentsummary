@@ -1,0 +1,99 @@
+/* Overall Layout */
+.dashboard-container {
+    padding: 2rem;
+    background: linear-gradient(135deg, #eef2f3, #3498db); /* Custom TachlesAI colors */
+    color: #2c3e50;
+    min-height: 100vh;
+    font-family: 'Heebo', sans-serif;
+  }
+  
+  /* Header */
+  .dashboard-header {
+    text-align: center;
+    margin-bottom: 2rem;
+  }
+  
+  .dashboard-title {
+    font-size: 2.5rem;
+    font-weight: bold;
+    color: #2c3e50;
+  }
+  
+  .dashboard-plan {
+    font-size: 1.2rem;
+    color: #7f8c8d;
+  }
+  
+  .dashboard-plan span {
+    font-weight: bold;
+    color: #3498db;
+  }
+  
+  /* Sections */
+  .dashboard-sections {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    gap: 1.5rem;
+  }
+  
+  .dashboard-section {
+    background: white;
+    border-radius: 12px;
+    padding: 1.5rem;
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.1);
+    text-align: center;
+  }
+  
+  .dashboard-section h3 {
+    font-size: 1.5rem;
+    color: #34495e;
+    margin-bottom: 1rem;
+  }
+  
+  .dashboard-section p {
+    color: #7f8c8d;
+    margin-bottom: 1.5rem;
+  }
+  
+  .dashboard-button {
+    padding: 0.75rem 1.5rem;
+    background: linear-gradient(135deg, #2ecc71, #3498db); /* TachlesAI gradient */
+    color: white;
+    border: none;
+    border-radius: 8px;
+    font-size: 1rem;
+    font-weight: bold;
+    cursor: pointer;
+    transition: all 0.3s ease-in-out;
+  }
+  
+  .dashboard-button:hover {
+    background: linear-gradient(135deg, #3498db, #2ecc71);
+    transform: translateY(-2px);
+    box-shadow: 0 8px 16px rgba(0, 0, 0, 0.1);
+  }
+  
+  /* Export Button */
+  .dashboard-export {
+    text-align: center;
+    margin-top: 2rem;
+  }
+  
+  .export-button {
+    padding: 1rem 2rem;
+    background: #e74c3c; /* Export button in a red tone */
+    color: white;
+    border: none;
+    border-radius: 8px;
+    font-size: 1rem;
+    font-weight: bold;
+    cursor: pointer;
+    transition: all 0.3s ease-in-out;
+  }
+  
+  .export-button:hover {
+    background: #c0392b;
+    transform: translateY(-2px);
+    box-shadow: 0 8px 16px rgba(0, 0, 0, 0.1);
+  }
+  

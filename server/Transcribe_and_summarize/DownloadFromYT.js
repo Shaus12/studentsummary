@@ -5,43 +5,56 @@
 import ytdl from 'youtube-dl-exec';
 import fs from 'fs/promises';
 import path from 'path';
-import { exec } from 'child_process';
-import { promisify } from 'util';
+import { fileURLToPath } from 'url';
+import { dirname } from 'path';
 
-const execAsync = promisify(exec);
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
 
 // Step 3: Define the function to download audio from YouTube
 async function downloadAudio(link) {
   try {
     // Create temp directory if it doesn't exist
-    const tempDir = path.resolve('./temp');
+    const tempDir = path.join(path.dirname(__filename), 'temp');
     await fs.mkdir(tempDir, { recursive: true });
     
-    // Clean up any existing files
+    const outputPath = path.join(tempDir, 'audio.mp3');
+    
+    // Delete existing audio file if it exists
     try {
-      await fs.unlink(path.join(tempDir, 'audio.webm.part'));
-      await fs.unlink(path.join(tempDir, 'audio.webm'));
-      await fs.unlink(path.join(tempDir, 'audio.mp3'));
-    } catch (e) {
-      // Ignore errors if files don't exist
+      await fs.unlink(outputPath);
+      console.log('Cleaned up existing audio file');
+    } catch (err) {
+      // File doesn't exist, which is fine
     }
     
-    // Download with simpler options
-    const outputPath = path.join(tempDir, 'audio.mp3');
-    const options = [
-      '--extract-audio',
-      '--audio-format', 'mp3',
-      '--audio-quality', '192K',
-      '-P', tempDir,  // Set download path explicitly
-      '-o', 'audio.mp3',  // Simpler output name
-      '--no-keep-video'
-    ];
-
     console.log('Starting download...');
-    await execAsync(`yt-dlp ${options.join(' ')} "${link}"`);
+    console.log('Output path:', outputPath);
 
-    // Verify the file exists
-    await fs.access(outputPath);
+    // Updated configuration for yt-dlp
+    await ytdl(link, {
+      extractAudio: true,
+      audioFormat: 'mp3',
+      audioQuality: '192k',
+      output: outputPath,
+      noCheckCertificates: true,
+      noWarnings: true,
+      preferFreeFormats: true,
+      forceOverwrite: true,
+      addHeader: [
+        'referer:youtube.com',
+        'user-agent:Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
+      ],
+      cookies: 'cookies.txt',  // Optional: if you have a cookies file
+      format: 'bestaudio',
+      extractorArgs: ['youtube:player_client=all'],
+      concurrent: 1
+    });
+
+    // Verify the file exists and is the correct one
+    const stats = await fs.stat(outputPath);
+    console.log(`Downloaded file size: ${stats.size} bytes`);
+
     console.log('Download complete!');
     return outputPath;
   } catch (error) {
@@ -49,9 +62,5 @@ async function downloadAudio(link) {
     throw error;
   }
 }
-
-// Example usage
-const youtubeLink = 'https://www.youtube.com/watch?v=VyCuoh9HCd8';
-downloadAudio(youtubeLink);
 
 export default downloadAudio;

@@ -21,7 +21,9 @@
     "google-auth-library": "^9.15.0",
     "jsonwebtoken": "^9.0.2",
     "openai": "^4.77.3",
+    "pdfkit": "^0.16.0",
     "pg": "^8.11.0",
+    "puppeteer": "^24.0.0",
     "util": "^0.12.5",
     "youtube-dl-exec": "^3.0.12"
   }

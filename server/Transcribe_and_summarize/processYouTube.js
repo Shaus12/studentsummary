@@ -4,112 +4,49 @@ import OpenAI from 'openai';
 import { exec } from 'child_process';
 import { promisify } from 'util';
 import path from 'path';
+import PDFDocument from 'pdfkit';
+import { createWriteStream } from 'fs';
+import puppeteer from 'puppeteer';
 
 const execAsync = promisify(exec);
 
 const openAiApiKey = "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";
 const openai = new OpenAI({ apiKey: openAiApiKey });
 
-// Modified splitAudio function to use mp3 format
-async function splitAudio(inputPath, segmentLength = 300) {
-  try {
-    console.log("Starting audio split process...");
-    const outputDir = './temp_segments';
-    await fs.mkdir(outputDir, { recursive: true });
-    
-    // First convert to WAV format (more stable)
-    console.log("Converting to WAV format...");
-    const wavPath = path.join(path.dirname(inputPath), 'converted.wav');
-    await execAsync(`ffmpeg -i "${inputPath}" -acodec pcm_s16le -ar 16000 -ac 1 "${wavPath}"`);
-    
-    // Then split the WAV
-    console.log("Splitting audio into segments...");
-    const command = `ffmpeg -i "${wavPath}" -f segment -segment_time ${segmentLength} -c copy "${outputDir}/segment_%03d.wav"`;
-    console.log("Running command:", command);
-    
-    await execAsync(command);
-    
-    // Clean up the intermediate WAV
-    await fs.unlink(wavPath);
-    
-    const files = await fs.readdir(outputDir);
-    console.log(`Created ${files.length} segments`);
-    return files.map(file => path.join(outputDir, file));
-  } catch (error) {
-    console.error('Error splitting audio:', error);
-    throw error;
-  }
-}
-
-// Modified transcribeAudio to use small model
 async function transcribeAudio(filePath) {
   try {
-    console.log("Starting transcription with Whisper Large V3...");
+    console.log("Starting transcription with Whisper Small...");
+    console.log(`Running Whisper command: whisper "${filePath}" --model small --language he --output_dir "${path.dirname(filePath)}"`);
     
-    // Split audio into segments
-    console.log("Splitting audio into segments...");
-    const segments = await splitAudio(filePath);
-    let fullTranscription = '';
+    const { stdout, stderr } = await execAsync(`whisper "${filePath}" --model small --language he --output_dir "${path.dirname(filePath)}"`);
     
-    // Process each segment
-    for (const [index, segment] of segments.entries()) {
-      console.log(`Starting segment ${index + 1}/${segments.length}...`);
-      
-      // Try Hebrew first
-      try {
-        console.log(`Running Whisper command: whisper "${segment}" --model large-v3 --language he`);
-        const { stdout: hebrewStdout, stderr: hebrewStderr } = await execAsync(
-          `whisper "${segment}" --model large-v3 --language he`,
-          { maxBuffer: 1024 * 1024 * 10 } // Increase buffer size
-        );
-        
-        console.log("Whisper output:", hebrewStdout);
-        if (hebrewStderr) {
-          console.log("Hebrew transcription warning:", hebrewStderr);
-        }
-        
-        // Read the Hebrew transcript
-        const transcriptPath = segment.replace(/\.[^/.]+$/, ".txt");
-        const hebrewTranscript = await fs.readFile(transcriptPath, 'utf8');
-        
-        // If Hebrew transcript is too short, try English
-        if (hebrewTranscript.trim().length < 50) {
-          throw new Error("Short transcript");
-        }
-        
-        // Add to full transcription
-        fullTranscription += hebrewTranscript + '\n';
-        
-        // Clean up segment files
-        await fs.unlink(transcriptPath);
-        await fs.unlink(segment);
-        
-      } catch (hebrewError) {
-        // Try English if Hebrew fails
-        console.log(`Trying English for segment ${index + 1}...`);
-        const { stdout: englishStdout, stderr: englishStderr } = await execAsync(
-          `whisper "${segment}" --model large-v3 --language en`
-        );
-        
-        if (englishStderr) {
-          console.log("English transcription warning:", englishStderr);
-        }
-        
-        // Read the English transcript
-        const transcriptPath = segment.replace(/\.[^/.]+$/, ".txt");
-        const englishTranscript = await fs.readFile(transcriptPath, 'utf8');
-        
-        // Add to full transcription
-        fullTranscription += englishTranscript + '\n';
-        
-        // Clean up segment files
-        await fs.unlink(transcriptPath);
-        await fs.unlink(segment);
-      }
+    if (stderr) {
+      console.error("Whisper Error:", stderr);
     }
+
+    // The transcript file will have the same name as the audio file but with .txt extension
+    const transcriptPath = filePath.replace(/\.mp3$/, ".txt");
+    console.log("Looking for transcript at:", transcriptPath);
     
-    console.log("Transcription completed!");
-    return fullTranscription;
+    // Wait a moment to ensure the file is written
+    await new Promise(resolve => setTimeout(resolve, 1000));
+    
+    try {
+      await fs.access(transcriptPath); // Check if the file exists
+      const hebrewTranscript = await fs.readFile(transcriptPath, 'utf8');
+      console.log("Successfully read transcript file");
+
+      // Clean up the transcript file
+      await fs.unlink(transcriptPath);
+
+      console.log("Transcription completed!");
+      return hebrewTranscript;
+    } catch (err) {
+      console.error("Could not find transcript file. Available files in directory:");
+      const files = await fs.readdir(path.dirname(filePath));
+      console.log(files);
+      throw new Error(`Transcript file not found at ${transcriptPath}`);
+    }
   } catch (error) {
     console.error("Transcription error:", error);
     throw error;
@@ -133,8 +70,62 @@ async function summarizeText(text) {
   }
 }
 
+// Add this function to create PDF
+async function createSummaryPDF(summary, outputPath) {
+  const browser = await puppeteer.launch();
+  const page = await browser.newPage();
+  
+  // Create HTML content with proper Hebrew support
+  const htmlContent = `
+    <!DOCTYPE html>
+    <html dir="rtl" lang="he">
+    <head>
+        <meta charset="UTF-8">
+        <style>
+            body {
+                font-family: Arial, sans-serif;
+                margin: 40px;
+                direction: rtl;
+            }
+            h1 {
+                text-align: center;
+                margin-bottom: 30px;
+            }
+            .summary {
+                line-height: 1.6;
+                text-align: right;
+            }
+        </style>
+    </head>
+    <body>
+        <h1>סיכום הקלטה</h1>
+        <div class="summary">
+            ${summary.replace(/\n/g, '<br>')}
+        </div>
+    </body>
+    </html>
+  `;
+
+  await page.setContent(htmlContent);
+  await page.pdf({
+    path: outputPath,
+    format: 'A4',
+    printBackground: true,
+    margin: {
+      top: '20mm',
+      right: '20mm',
+      bottom: '20mm',
+      left: '20mm'
+    }
+  });
+
+  await browser.close();
+}
+
 async function processYouTubeVideo(youtubeUrl) {
   try {
+    console.log(`Processing YouTube video: ${youtubeUrl}`);
+    
     // Step 1: Download audio from YouTube
     console.log("Downloading audio from YouTube...");
     const audioPath = await downloadAudio(youtubeUrl);
@@ -143,41 +134,34 @@ async function processYouTubeVideo(youtubeUrl) {
     console.log("Transcribing audio...");
     const transcription = await transcribeAudio(audioPath);
     
-    // Step 3: Break transcription into chunks and summarize
+    // Step 3: Summarize content
     console.log("Summarizing content...");
-    const words = transcription.split(" ");
-    const chunkSize = 1500;
-    const chunks = [];
+    const summary = await summarizeText(transcription);
     
-    for (let i = 0; i < words.length; i += chunkSize) {
-      chunks.push(words.slice(i, i + chunkSize).join(" "));
-    }
-    
-    const summaries = [];
-    for (const [index, chunk] of chunks.entries()) {
-      console.log(`Summarizing chunk ${index + 1}/${chunks.length}...`);
-      const summary = await summarizeText(chunk);
-      summaries.push(summary);
-    }
-    
-    // Step 4: Create final summary
-    const finalSummary = await summarizeText(summaries.join(" "));
+    // Step 4: Create PDF
+    const pdfPath = path.join(path.dirname(audioPath), 'summary.pdf');
+    await createSummaryPDF(summary, pdfPath);
+    console.log(`PDF summary created at: ${pdfPath}`);
     
     // Clean up: Delete the audio file
     await fs.unlink(audioPath);
     
-    console.log("הנה הסיכום שלך:", finalSummary);
-    return finalSummary;
+    console.log("הנה הסיכום שלך:", summary);
+    
+    return {
+      summary: summary,
+      pdfPath: pdfPath
+    };
   } catch (error) {
     console.error("Error processing video:", error);
     throw error;
   }
 }
 
-// Example usage
-const youtubeUrl = "https://www.youtube.com/watch?v=9w-wdYDF5-E";
+// Example usage (you can comment this out when importing the function)
+const youtubeUrl = "https://www.youtube.com/watch?v=HQ3yZ2es_Ts";
 processYouTubeVideo(youtubeUrl)
-  .then(summary => console.log("Process completed successfully!"))
+  .then(result => console.log("Process completed successfully!"))
   .catch(error => console.error("Process failed:", error));
 
 export default processYouTubeVideo; 
