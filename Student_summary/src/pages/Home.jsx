@@ -10,13 +10,11 @@ import ThenVsToday from '../components/ThenVsToday';
 const Home = () => {
   return (
     <div>
-      <div className="bg-white">
-        <Hero />
-      </div>
+      <Hero />
       <Features />
       <HowItWorks />
-      <ComparisonTable />
-      <ThenVsToday />
+      <ComparisonTable /> 
+      <ThenVsToday /> 
       <StudentStories />
       <Footer />
     </div>
