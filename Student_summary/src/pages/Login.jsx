@@ -39,6 +39,7 @@ function Login() {
         // Redirect to main page after 2 seconds
         setTimeout(() => {
           navigate('/');
+          window.location.reload();
         }, 2000);
       } else {
         setError(data.message || 'שגיאה בהתחברות');

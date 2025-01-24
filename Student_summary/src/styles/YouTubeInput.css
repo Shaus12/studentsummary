@@ -1,0 +1,49 @@
+import '../styles/YouTubeInput.css';
+
+.youtube-input-container {
+  margin: 20px 0;
+  padding: 20px;
+  border: 2px dashed #ccc;
+  border-radius: 8px;
+  text-align: center;
+}
+
+.youtube-url-input {
+  width: 100%;
+  max-width: 500px;
+  padding: 10px;
+  margin: 15px 0;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  font-size: 16px;
+  direction: rtl;
+}
+
+.submit-button {
+  background-color: #4CAF50;
+  color: white;
+  padding: 10px 20px;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 16px;
+}
+
+.submit-button:disabled {
+  background-color: #cccccc;
+  cursor: not-allowed;
+}
+
+.submit-button.loading {
+  background-color: #45a049;
+}
+
+.error-message {
+  color: #ff0000;
+  margin: 10px 0;
+}
+
+.success-message {
+  color: #4CAF50;
+  margin: 10px 0;
+} 

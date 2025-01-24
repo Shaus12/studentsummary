@@ -8,7 +8,10 @@ import { OAuth2Client } from 'google-auth-library';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import processYouTubeVideo from './Transcribe_and_summarize/processYouTube.js';
-import fs from 'fs';
+import { transcribeAudio, summarizeText, createSummaryPDF } from './Transcribe_and_summarize/processYouTube.js';
+import { unlink } from 'fs/promises';
+import multer from 'multer';
+import { existsSync, mkdirSync } from 'fs';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -23,8 +26,8 @@ app.use(cors());
 
 // Create temp directory if it doesn't exist
 const tempDir = path.join(__dirname, 'temp');
-if (!fs.existsSync(tempDir)) {
-    fs.mkdirSync(tempDir, { recursive: true });
+if (!existsSync(tempDir)) {
+    mkdirSync(tempDir, { recursive: true });
 }
 
 // Serve static files from the temp directory
@@ -46,6 +49,119 @@ try {
 } catch (err) {
   console.error('Database connection error:', err);
 }
+
+// Configure multer for file uploads
+const storage = multer.diskStorage({
+  destination: function (req, file, cb) {
+    cb(null, path.join(__dirname, 'temp')) // Save to temp directory
+  },
+  filename: function (req, file, cb) {
+    cb(null, Date.now() + '-' + file.originalname) // Add timestamp to filename
+  }
+});
+
+const upload = multer({ 
+  storage: storage,
+  fileFilter: (req, file, cb) => {
+    // Accept only audio files
+    if (file.mimetype.startsWith('audio/')) {
+      cb(null, true);
+    } else {
+      cb(new Error('Only audio files are allowed!'));
+    }
+  }
+});
+
+// Add this helper function at the top of your file
+const checkAndUpdateUsage = async (userEmail) => {
+  try {
+    // First check membership type
+    const membershipResult = await db.query(
+      "SELECT membership_type FROM users WHERE email = $1",
+      [userEmail]
+    );
+    
+    if (membershipResult.rows[0].membership_type === 'premium') {
+      return { allowed: true };
+    }
+
+    // For free users, check their usage in the last 7 days
+    const usageResult = await db.query(`
+      SELECT COUNT(*) as usage_count 
+      FROM summaries 
+      WHERE user_email = $1 
+      AND created_at > NOW() - INTERVAL '7 days'`,
+      [userEmail]
+    );
+
+    const usageCount = parseInt(usageResult.rows[0].usage_count);
+    
+    if (usageCount >= 10) {
+      return {
+        allowed: false,
+        message: "You have reached your weekly limit of 10 transcriptions. Upgrade to premium for unlimited use!"
+      };
+    }
+
+    return { allowed: true };
+  } catch (error) {
+    console.error('Error checking usage:', error);
+    throw error;
+  }
+};
+
+// Simplified setup function
+const setupMembershipColumn = async () => {
+  try {
+    // Create enum type if it doesn't exist
+    await db.query(`
+      DO $$ BEGIN
+        CREATE TYPE membership_status AS ENUM ('free', 'premium');
+      EXCEPTION
+        WHEN duplicate_object THEN null;
+      END $$;
+    `);
+
+    // Add only membership_type column
+    await db.query(`
+      ALTER TABLE users 
+      ADD COLUMN IF NOT EXISTS membership_type membership_status DEFAULT 'free'
+    `);
+    
+    console.log('Membership column added to users table');
+  } catch (error) {
+    console.error('Error setting up membership column:', error);
+  }
+};
+
+// Simplified upgrade endpoint
+app.post("/api/upgrade-membership", async (req, res) => {
+  try {
+    const token = req.headers.authorization?.split(' ')[1];
+    if (!token) {
+      return res.status(401).json({ message: "No authorization token provided" });
+    }
+
+    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    const userEmail = decoded.email;
+
+    // Simple upgrade to premium
+    await db.query(`
+      UPDATE users 
+      SET membership_type = 'premium'
+      WHERE email = $1
+      RETURNING *
+    `, [userEmail]);
+
+    res.json({ message: "Membership upgraded successfully" });
+  } catch (error) {
+    console.error('Error upgrading membership:', error);
+    res.status(500).json({ 
+      message: "Error upgrading membership",
+      error: error.message 
+    });
+  }
+});
 
 app.post("/api/signup", async (req, res) => {
   const { email, password, firstName, lastName } = req.body;
@@ -94,7 +210,7 @@ app.post("/api/login", async (req, res) => {
 
     const token = jwt.sign(
       { userId: user.id, email: user.email },
-      'your_jwt_secret',
+      process.env.JWT_SECRET,
       { expiresIn: '24h' }
     );
 
@@ -193,8 +309,7 @@ app.post("/api/process-youtube", async (req, res) => {
     const userEmail = decoded.email;
 
     const result = await processYouTubeVideo(youtubeUrl);
-    console.log('Result from processYouTubeVideo:', result); // Debug log
-
+    
     // Save to database with title
     const query = `
       INSERT INTO summaries (user_email, video_url, summary, pdf_path, title)
@@ -202,24 +317,15 @@ app.post("/api/process-youtube", async (req, res) => {
       RETURNING *
     `;
     
-    const values = [
+    await db.query(query, [
       userEmail,
       youtubeUrl,
       result.summary,
       result.pdfPath,
-      result.title // Make sure this matches the property name from processYouTubeVideo
-    ];
+      result.title
+    ]);
 
-    console.log('Inserting with values:', values); // Debug log
-    
-    const dbResult = await db.query(query, values);
-    console.log('Database insert result:', dbResult.rows[0]); // Debug log
-
-    res.json({
-      summary: result.summary,
-      pdfPath: result.pdfPath,
-      title: result.title // Make sure to send title back to frontend
-    });
+    res.json(result);
   } catch (error) {
     console.error('Error processing YouTube video:', error);
     res.status(500).json({ 
@@ -259,6 +365,109 @@ app.get("/api/summaries", async (req, res) => {
     console.error('Error fetching summaries:', error);
     res.status(500).json({ 
       message: "Error fetching summaries",
+      error: error.message 
+    });
+  }
+});
+
+app.post("/api/process-audio", upload.single('audioFile'), async (req, res) => {
+  try {
+    const token = req.headers.authorization?.split(' ')[1];
+    if (!token) {
+      return res.status(401).json({ message: "No authorization token provided" });
+    }
+
+    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    const userEmail = decoded.email;
+
+    // Check usage limits
+    const usageCheck = await checkAndUpdateUsage(userEmail);
+    if (!usageCheck.allowed) {
+      return res.status(403).json({ message: usageCheck.message });
+    }
+
+    if (!req.file) {
+      return res.status(400).json({ message: "No file uploaded" });
+    }
+
+    const filePath = req.file.path;
+    
+    // Process the audio file using the same functions as YouTube videos
+    const transcription = await transcribeAudio(filePath);
+    const summary = await summarizeText(transcription);
+    const pdfPath = path.join(path.dirname(filePath), 'summary.pdf');
+    await createSummaryPDF(summary, pdfPath);
+
+    // Save to database
+    const query = `
+      INSERT INTO summaries (user_email, file_name, summary, pdf_path)
+      VALUES ($1, $2, $3, $4)
+      RETURNING *
+    `;
+    
+    const values = [
+      userEmail,
+      req.file.originalname,
+      summary,
+      '/files/summary.pdf'
+    ];
+
+    const dbResult = await db.query(query, values);
+
+    // Clean up the original audio file using the promise version
+    await unlink(filePath);
+
+    res.json({
+      summary: summary,
+      pdfPath: '/files/summary.pdf'
+    });
+
+  } catch (error) {
+    console.error('Error processing audio file:', error);
+    res.status(500).json({ 
+      message: "Error processing audio file",
+      error: error.message 
+    });
+  }
+});
+
+// Add an endpoint to check remaining uses
+app.get("/api/usage-status", async (req, res) => {
+  try {
+    const token = req.headers.authorization?.split(' ')[1];
+    if (!token) {
+      return res.status(401).json({ message: "No authorization token provided" });
+    }
+
+    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    const userEmail = decoded.email;
+
+    // Get membership type and usage count
+    const [membershipResult, usageResult] = await Promise.all([
+      db.query("SELECT membership_type FROM users WHERE email = $1", [userEmail]),
+      db.query(`
+        SELECT COUNT(*) as usage_count 
+        FROM summaries 
+        WHERE user_email = $1 
+        AND created_at > NOW() - INTERVAL '7 days'`,
+        [userEmail]
+      )
+    ]);
+
+    const membershipType = membershipResult.rows[0].membership_type;
+    const usageCount = parseInt(usageResult.rows[0].usage_count);
+
+    res.json({
+      membershipType,
+      usageCount,
+      remainingUses: membershipType === 'premium' ? 'unlimited' : (10 - usageCount),
+      resetDate: membershipType === 'free' ? new Date(Date.now() + (7 * 24 * 60 * 60 * 1000)).toISOString() : null
+    });
+
+  } catch (error) {
+    console.error('Error fetching usage status:', error);
+    res.status(500).json({ 
+      message: "Error fetching usage status",
       error: error.message 
     });
   }

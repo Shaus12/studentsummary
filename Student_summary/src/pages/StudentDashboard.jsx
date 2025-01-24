@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Card, CardContent } from '../components/ui/card';
 import { useNavigate } from 'react-router-dom';
+import UsageStatus from '../components/UsageStatus';
 
 const Dashboard = () => {
   const navigate = useNavigate();
@@ -10,6 +11,19 @@ const Dashboard = () => {
   const [summaries, setSummaries] = useState([]);
   const userName = "דניאל";
   const userPlan = "Pro";
+  const [file, setFile] = useState(null);
+  const [usageData, setUsageData] = useState(null);
+  const [selectedFile, setSelectedFile] = useState(null);
+
+  useEffect(() => {
+    const token = localStorage.getItem('token');
+    if (!token) {
+      navigate('/login');
+      return;
+    }
+    fetchSummaries();
+    fetchUsageStatus();
+  }, [navigate]);
 
   const fetchSummaries = async () => {
     try {
@@ -19,8 +33,6 @@ const Dashboard = () => {
           'Authorization': `Bearer ${token}`
         }
       });
-
-      if (!response.ok) throw new Error('Failed to fetch summaries');
       const data = await response.json();
       setSummaries(data);
     } catch (error) {
@@ -28,9 +40,20 @@ const Dashboard = () => {
     }
   };
 
-  useEffect(() => {
-    fetchSummaries();
-  }, []);
+  const fetchUsageStatus = async () => {
+    try {
+      const token = localStorage.getItem('token');
+      const response = await fetch('http://localhost:5001/api/usage-status', {
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
+      const data = await response.json();
+      setUsageData(data);
+    } catch (error) {
+      console.error('Error fetching usage status:', error);
+    }
+  };
 
   const handleDrag = (e) => {
     e.preventDefault();
@@ -42,43 +65,108 @@ const Dashboard = () => {
     }
   };
 
-  const handleYouTubeSubmit = async (e) => {
-    e.preventDefault();
-    if (!youtubeUrl) return;
-
+  const handleUpgradeMembership = async () => {
     try {
-      setLoading(true);
       const token = localStorage.getItem('token');
-      
-      const response = await fetch('http://localhost:5001/api/process-youtube', {
+      const response = await fetch('http://localhost:5001/api/upgrade-membership', {
         method: 'POST',
         headers: {
-          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        }
+      });
+      
+      if (response.ok) {
+        alert('Successfully upgraded to premium!');
+        fetchUsageStatus();
+      } else {
+        const data = await response.json();
+        alert(data.message || 'Error upgrading membership');
+      }
+    } catch (error) {
+      console.error('Error upgrading membership:', error);
+      alert('Error upgrading membership');
+    }
+  };
+
+  const handleFileUpload = async (e) => {
+    if (usageData?.membershipType === 'free' && usageData?.remainingUses <= 0) {
+      alert('You have reached your weekly limit. Please upgrade to premium for unlimited use.');
+      return;
+    }
+
+    const file = e.target.files[0];
+    if (!file) return;
+
+    setSelectedFile(file);
+    setLoading(true);
+
+    try {
+      const formData = new FormData();
+      formData.append('audioFile', file);
+
+      const token = localStorage.getItem('token');
+      const response = await fetch('http://localhost:5001/api/process-audio', {
+        method: 'POST',
+        headers: {
           'Authorization': `Bearer ${token}`
         },
-        body: JSON.stringify({ youtubeUrl }),
+        body: formData
       });
 
       if (!response.ok) {
-        const errorData = await response.text();
-        console.error('Server response:', errorData);
-        throw new Error('Network response was not ok');
+        throw new Error('Failed to process audio file');
       }
 
       const data = await response.json();
-      console.log('Received data:', data);
-      
-      await fetchSummaries();
-      navigate('/summary-result', {
-        state: {
-          summary: data.summary,
-          pdfPath: data.pdfPath,
-          title: data.title  // Add this line
-        }
-      });
+      fetchSummaries();
+      fetchUsageStatus();
+      alert('File processed successfully!');
     } catch (error) {
       console.error('Error:', error);
-      alert('Error processing video. Please try again.');
+      alert('Error processing file');
+    } finally {
+      setLoading(false);
+      setSelectedFile(null);
+    }
+  };
+
+  const handleYouTubeSubmit = async (e) => {
+    e.preventDefault();
+    if (usageData?.membershipType === 'free' && usageData?.remainingUses <= 0) {
+      alert('You have reached your weekly limit. Please upgrade to premium for unlimited use.');
+      return;
+    }
+
+    if (!youtubeUrl) {
+      alert('Please enter a YouTube URL');
+      return;
+    }
+
+    setLoading(true);
+
+    try {
+      const token = localStorage.getItem('token');
+      const response = await fetch('http://localhost:5001/api/process-youtube', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ url: youtubeUrl })
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to process YouTube video');
+      }
+
+      const data = await response.json();
+      fetchSummaries();
+      fetchUsageStatus();
+      alert('Video processed successfully!');
+      setYoutubeUrl('');
+    } catch (error) {
+      console.error('Error:', error);
+      alert('Error processing video');
     } finally {
       setLoading(false);
     }
@@ -92,9 +180,26 @@ const Dashboard = () => {
           <h2 className="text-2xl font-semibold font-sans">שלום {userName}, כיף לראות אותך שוב</h2>
           <div className="flex items-center space-x-2 space-x-reverse bg-blue-50 px-4 py-2 rounded-full">
             <span className="text-yellow-500">👑</span>
-            <span className="font-medium font-sans">{userPlan === "Pro" ? "חשבון Pro" : "חשבון חינמי"}</span>
+            <span className="font-medium font-sans">
+              {usageData?.membershipType === 'premium' ? "חשבון Pro" : "חשבון חינמי"}
+            </span>
           </div>
         </div>
+
+        {/* Add Usage Status Component */}
+        <UsageStatus />
+
+        {/* Show upgrade button for free users */}
+        {usageData?.membershipType === 'free' && (
+          <div className="mb-4">
+            <button 
+              onClick={handleUpgradeMembership}
+              className="bg-purple-600 text-white px-4 py-2 rounded hover:bg-purple-700"
+            >
+              Upgrade to Premium
+            </button>
+          </div>
+        )}
 
         {/* Upload Area */}
         <Card className={`border-2 border-dashed ${dragActive ? 'border-blue-500 bg-blue-50' : 'border-gray-300'} rounded-lg`}>
@@ -117,12 +222,25 @@ const Dashboard = () => {
                   className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:border-blue-500 focus:ring-1 focus:ring-blue-500 font-sans"
                 />
                 <span className="text-gray-500 font-sans">- או -</span>
+                
+                <input
+                  type="file"
+                  onChange={handleFileUpload}
+                  accept="audio/*"
+                  className="w-full text-sm text-gray-500
+                    file:mr-4 file:py-2 file:px-4
+                    file:rounded-full file:border-0
+                    file:text-sm file:font-semibold
+                    file:bg-blue-50 file:text-blue-700
+                    hover:file:bg-blue-100"
+                />
+                
                 <button 
                   type="submit"
-                  disabled={loading || !youtubeUrl}
-                  className={`px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors w-full font-sans ${loading || !youtubeUrl ? 'opacity-50 cursor-not-allowed' : ''}`}
+                  disabled={loading || (!youtubeUrl && !file)}
+                  className={`px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors w-full font-sans ${loading || (!youtubeUrl && !file) ? 'opacity-50 cursor-not-allowed' : ''}`}
                 >
-                  {loading ? 'מעבד...' : 'עבד סרטון'}
+                  {loading ? 'מעבד...' : 'עבד קובץ'}
                 </button>
               </form>
 
