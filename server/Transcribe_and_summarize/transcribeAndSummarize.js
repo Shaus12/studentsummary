@@ -1,75 +1,68 @@
-import axios from "axios";
-import fs from "fs/promises"; // Use `fs/promises` for async file operations
-import OpenAI from "openai";
+import { createClient } from '@deepgram/sdk';
+import fs from "fs/promises";
+import { GoogleGenerativeAI } from '@google/generative-ai';
 
-const hfApiToken = "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"; // Replace with your Hugging Face token
-const openAiApiKey = "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"; // Replace with your OpenAI API key
-const model = "openai/whisper-large-v3";
-const filePath = "./audioTest.m4a"; // Update with your actual audio file path
+// Configure Deepgram
+const deepgramApiKey = '26e3b5fc5fd1451123c9c799ede5d211ff94fce9';
+const deepgram = createClient(deepgramApiKey);
 
-const openai = new OpenAI({ apiKey: openAiApiKey });
+// Configure Gemini
+const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 
-// Transcription Function
+// Updated Transcription Function using Deepgram
 async function transcribeAudio(filePath, retries = 3, delay = 5000) {
   try {
     const audioData = await fs.readFile(filePath);
 
-    for (let i = 0; i <= retries; i++) {
-      try {
-        const response = await axios.post(
-          `https://api-inference.huggingface.co/models/${model}`,
-          audioData,
-          {
-            headers: {
-              Authorization: `Bearer ${hfApiToken}`,
-              "Content-Type": "audio/m4a",
-            },
-          }
-        );
-
-        //console.log("Transcription complete.");
-        return response.data.text;
-      } catch (error) {
-        if (
-          error.response &&
-          error.response.data &&
-          error.response.data.error &&
-          error.response.data.error.includes("too busy")
-        ) {
-          console.error(
-            `Attempt ${i + 1} failed: Model too busy. Retrying in ${delay / 1000} seconds...`
-          );
-          if (i < retries) {
-            await new Promise((resolve) => setTimeout(resolve, delay));
-          } else {
-            throw new Error("Max retries reached. Unable to transcribe.");
-          }
-        } else {
-          throw error;
-        }
+    const { result, error } = await deepgram.listen.prerecorded.transcribeFile(
+      audioData,
+      {
+        model: 'whisper-large',
+        language: 'he',
+        smart_format: true,
       }
+    );
+
+    if (error) {
+      throw new Error('Deepgram transcription failed: ' + error);
     }
-  } catch (finalError) {
-    console.error("Final Error:", finalError.message || finalError);
-    throw finalError;
+
+    return result.results.channels[0].alternatives[0].transcript;
+  } catch (error) {
+    console.error("Error transcribing audio:", error);
+    throw error;
   }
 }
 
-// Summarization Function
-async function summarizeText(openAiApiKey, text) {
+// Updated Summarization Function using Gemini
+async function summarizeText(text) {
   try {
-    const response = await openai.chat.completions.create({
-      model: "gpt-4",
-      messages: [
-        { role: "user", content: `Summarize the following text in Hebrew with bulletpoints:\n\n${text}` },
-      ],
-      max_tokens: 500,
-      temperature: 0.5,
+    const generationConfig = {
+      temperature: 1,
+      topP: 0.95,
+      topK: 40,
+      maxOutputTokens: 8192,
+    };
+
+    const model = genAI.getGenerativeModel({
+      model: "gemini-1.5-flash-8b",
+      generationConfig,
     });
 
-    return response.choices[0].message.content.trim();
+    const chat = model.startChat({
+      history: [],
+    });
+
+    const prompt = `Please summarize the following text in Hebrew, using bullet points:
+    
+    ${text}
+    
+    Please make the summary concise and clear, focusing on the main points.`;
+
+    const result = await chat.sendMessage(prompt);
+    return result.response.text;
   } catch (error) {
-    console.error("Error summarizing text:", error.response?.data || error.message);
+    console.error("Error summarizing text:", error);
     throw error;
   }
 }
@@ -93,12 +86,12 @@ async function processAndSummarize(filePath) {
     const summaries = [];
     for (const [index, chunk] of chunks.entries()) {
       console.log(`Summarizing chunk ${index + 1}/${chunks.length}...`);
-      const summary = await summarizeText(openAiApiKey, chunk);
+      const summary = await summarizeText(chunk);
       summaries.push(summary);
     }
 
     // Step 4: Combine all summaries into a final summary
-    const finalSummary = await summarizeText(openAiApiKey, summaries.join(" "));
+    const finalSummary = await summarizeText(summaries.join(" "));
 
     console.log("הנה הסיכום שלך:", finalSummary);
     return finalSummary;
@@ -110,3 +103,5 @@ async function processAndSummarize(filePath) {
 
 // Call the process function
 processAndSummarize(filePath).catch((err) => console.error(err));
+
+export { transcribeAudio, summarizeText, processAndSummarize };

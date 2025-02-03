@@ -2,14 +2,15 @@ import React, { useState, useEffect } from 'react';
 import { Card, CardContent } from '../components/ui/card';
 import { useNavigate } from 'react-router-dom';
 import UsageStatus from '../components/UsageStatus';
+import Navbar from '../components/Navbar';
 
-const Dashboard = () => {
+const StudentDashboard = () => {
   const navigate = useNavigate();
   const [dragActive, setDragActive] = useState(false);
   const [youtubeUrl, setYoutubeUrl] = useState('');
   const [loading, setLoading] = useState(false);
   const [summaries, setSummaries] = useState([]);
-  const userName = "דניאל";
+  const [user, setUser] = useState(null);
   const userPlan = "Pro";
   const [file, setFile] = useState(null);
   const [usageData, setUsageData] = useState(null);
@@ -23,6 +24,11 @@ const Dashboard = () => {
     }
     fetchSummaries();
     fetchUsageStatus();
+    // Get user data from localStorage
+    const userData = localStorage.getItem('user');
+    if (userData) {
+      setUser(JSON.parse(userData));
+    }
   }, [navigate]);
 
   const fetchSummaries = async () => {
@@ -132,41 +138,44 @@ const Dashboard = () => {
 
   const handleYouTubeSubmit = async (e) => {
     e.preventDefault();
-    if (usageData?.membershipType === 'free' && usageData?.remainingUses <= 0) {
-      alert('You have reached your weekly limit. Please upgrade to premium for unlimited use.');
-      return;
-    }
-
-    if (!youtubeUrl) {
-      alert('Please enter a YouTube URL');
+    
+    if (!youtubeUrl || !youtubeUrl.includes('youtube.com')) {
+      alert('Please enter a valid YouTube URL');
       return;
     }
 
     setLoading(true);
-
     try {
       const token = localStorage.getItem('token');
+      
+      console.log('Sending URL:', youtubeUrl);
+      
       const response = await fetch('http://localhost:5001/api/process-youtube', {
         method: 'POST',
         headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json'
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
         },
-        body: JSON.stringify({ url: youtubeUrl })
+        body: JSON.stringify({ 
+          url: youtubeUrl.trim() 
+        })
       });
 
       if (!response.ok) {
-        throw new Error('Failed to process YouTube video');
+        const errorData = await response.json();
+        throw new Error(errorData.message || 'Failed to process video');
       }
 
       const data = await response.json();
-      fetchSummaries();
-      fetchUsageStatus();
-      alert('Video processed successfully!');
-      setYoutubeUrl('');
+      navigate('/summary-result', { 
+        state: { 
+          summary: data.summary,
+          pdfPath: data.pdfPath
+        }
+      });
     } catch (error) {
       console.error('Error:', error);
-      alert('Error processing video');
+      alert(error.message || 'Error processing video');
     } finally {
       setLoading(false);
     }
@@ -174,10 +183,12 @@ const Dashboard = () => {
 
   return (
     <div className="min-h-screen bg-white text-gray-800 rtl font-sans" dir="rtl">
-      {/* Welcome and Plan Status */}
+      <Navbar />
       <div className="max-w-6xl mx-auto px-4 py-6">
         <div className="flex justify-between items-center mb-8">
-          <h2 className="text-2xl font-semibold font-sans">שלום {userName}, כיף לראות אותך שוב</h2>
+          <h1 className="text-2xl font-bold">
+            {user ? `שלום, ${user.firstName}` : 'שלום, אורח'}
+          </h1>
           <div className="flex items-center space-x-2 space-x-reverse bg-blue-50 px-4 py-2 rounded-full">
             <span className="text-yellow-500">👑</span>
             <span className="font-medium font-sans">
@@ -220,6 +231,7 @@ const Dashboard = () => {
                   onChange={(e) => setYoutubeUrl(e.target.value)}
                   placeholder="הדבק קישור YouTube כאן..."
                   className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:border-blue-500 focus:ring-1 focus:ring-blue-500 font-sans"
+                  required
                 />
                 <span className="text-gray-500 font-sans">- או -</span>
                 
@@ -300,4 +312,4 @@ const Dashboard = () => {
   );
 };
 
-export default Dashboard;
+export default StudentDashboard;

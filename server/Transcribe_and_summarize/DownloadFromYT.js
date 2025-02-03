@@ -12,7 +12,7 @@ async function downloadAudio(youtubeUrl) {
     const tempDir = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'temp');
     const outputPath = path.join(tempDir, 'audio.mp3');
 
-    // Use yt-dlp instead of ytdl-core
+    // Modified command to output MP3 format
     const command = `yt-dlp -x --audio-format mp3 --audio-quality 0 -o "${outputPath}" "${youtubeUrl}"`;
     
     console.log('Running command:', command);

@@ -18,3 +18,82 @@ body {
   padding: 2rem;
   text-align: center;
 }
+
+.section {
+  opacity: 0;
+  transform: translateY(20px);
+  transition: all 1s ease-out;
+}
+
+.section.visible {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+/* ... existing code ... */
+
+.faq-container {
+  max-width: 800px;
+  margin: 2rem auto;
+  padding: 0 1rem;
+}
+
+.faq-title {
+  text-align: center;
+  margin-bottom: 2rem;
+  font-size: 2rem;
+  color: #333;
+}
+
+.faq-list {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.faq-item {
+  border-radius: 8px;
+  overflow: hidden;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+
+.faq-question {
+  width: 100%;
+  padding: 1rem;
+  background: #f8f9fa;
+  border: none;
+  text-align: right;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  cursor: pointer;
+  font-weight: 500;
+  transition: background-color 0.3s;
+}
+
+.faq-question:hover {
+  background: #e9ecef;
+}
+
+.faq-question.active {
+  background: #007bff;
+  color: white;
+}
+
+.faq-answer {
+  max-height: 0;
+  overflow: hidden;
+  transition: max-height 0.3s ease-out;
+  background: white;
+  padding: 0 1rem;
+}
+
+.faq-answer.active {
+  max-height: 200px;
+  padding: 1rem;
+}
+
+.faq-icon {
+  font-size: 1.2rem;
+  font-weight: bold;
+}

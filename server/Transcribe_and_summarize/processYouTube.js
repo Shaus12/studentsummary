@@ -1,47 +1,71 @@
+import 'dotenv/config';
 import downloadAudio from './DownloadFromYT.js';
 import fs from 'fs/promises';
-import OpenAI from 'openai';
-import { exec } from 'child_process';
-import { promisify } from 'util';
+import { readFileSync } from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import puppeteer from 'puppeteer';
+import { createClient } from '@deepgram/sdk';
+import { GoogleGenerativeAI } from '@google/generative-ai';
 
-const execAsync = promisify(exec);
+// Configure Deepgram with increased timeout
+const deepgramApiKey = process.env.DEEPGRAM_API_KEY;
+const deepgram = createClient(deepgramApiKey, {
+  timeoutMs: 120000,  // 2 minutes timeout
+});
 
-const openai = new OpenAI({ apiKey: "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" });
+// Configure Gemini
+const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
+
+// Then verify the API key is loaded
+console.log('Deepgram API Key:', process.env.DEEPGRAM_API_KEY ? 'Found' : 'Not found');
+
+// Add retry logic
+async function retryWithDelay(fn, retries = 3, delay = 5000) {
+  try {
+    return await fn();
+  } catch (error) {
+    if (retries === 0) throw error;
+    console.log(`Retrying... ${retries} attempts left`);
+    await new Promise(resolve => setTimeout(resolve, delay));
+    return retryWithDelay(fn, retries - 1, delay);
+  }
+}
 
 export async function transcribeAudio(filePath) {
   try {
-    console.log("Starting transcription with Whisper Small...");
-    console.log(`Running Whisper command: whisper "${filePath}" --model small --language he --output_dir "${path.dirname(filePath)}"`);
+    console.log("Starting transcription with Deepgram...");
     
-    const { stdout, stderr } = await execAsync(`whisper "${filePath}" --model small --language he --output_dir "${path.dirname(filePath)}"`);
+    const audioFile = readFileSync(filePath);
+    console.log(`Audio file size: ${audioFile.length} bytes`);
     
-    if (stderr) {
-      console.error("Whisper Error:", stderr);
+    const transcribeFunction = async () => {
+      const { result, error } = await deepgram.listen.prerecorded.transcribeFile(
+        audioFile,
+        {
+          model: 'whisper',
+          language: 'he',
+          smart_format: true,
+        }
+      );
+
+      if (error) {
+        console.error('Deepgram error details:', error);
+        throw new Error('Deepgram transcription failed: ' + error);
+      }
+
+      return result;
+    };
+
+    const result = await retryWithDelay(transcribeFunction);
+    const transcript = result.results.channels[0].alternatives[0].transcript;
+    console.log("Transcription completed! Content:", transcript);
+    
+    if (!transcript || transcript.trim().length === 0) {
+      throw new Error('Empty transcription received');
     }
-
-    const transcriptPath = filePath.replace(/\.mp3$/, ".txt");
-    console.log("Looking for transcript at:", transcriptPath);
     
-    await new Promise(resolve => setTimeout(resolve, 1000));
-    
-    try {
-      await fs.access(transcriptPath);
-      const hebrewTranscript = await fs.readFile(transcriptPath, 'utf8');
-      console.log("Successfully read transcript file");
-
-      await fs.unlink(transcriptPath);
-
-      console.log("Transcription completed!");
-      return hebrewTranscript;
-    } catch (err) {
-      console.error("Could not find transcript file. Available files in directory:");
-      const files = await fs.readdir(path.dirname(filePath));
-      console.log(files);
-      throw new Error(`Transcript file not found at ${transcriptPath}`);
-    }
+    return transcript;
   } catch (error) {
     console.error("Transcription error:", error);
     throw error;
@@ -50,15 +74,39 @@ export async function transcribeAudio(filePath) {
 
 export async function summarizeText(text) {
   try {
-    const response = await openai.chat.completions.create({
-      model: "gpt-4",
-      messages: [
-        { role: "user", content: `Summarize the following text in Hebrew with bulletpoints:\n\n${text}` },
-      ],
-      max_tokens: 1000,
-      temperature: 0.5,
+    console.log("Starting summarization with Gemini...");
+    console.log("Text to summarize:", text);
+    
+    const generationConfig = {
+      temperature: 1,
+      topP: 0.95,
+      topK: 40,
+      maxOutputTokens: 8192,
+    };
+
+    const model = genAI.getGenerativeModel({
+      model: "gemini-1.5-flash-8b",
+      generationConfig,
     });
-    return response.choices[0].message.content.trim();
+
+    const prompt = `Please summarize the following text in Hebrew, using bullet points:
+    
+    ${text}
+    
+    Please make the summary concise and clear, focusing on the main points.`;
+
+    const result = await model.generateContent(prompt);
+    
+    // Access the text from the first candidate's content parts
+    const summary = result.response.candidates[0].content.parts.map(part => part.text).join(' ');
+    console.log("Raw Gemini response:", result.response);  // Log the full response
+    console.log("Summarization completed! Result:", summary);
+    
+    if (!summary || typeof summary !== 'string' || summary.trim().length === 0) {
+      throw new Error('Invalid summary format received from Gemini');
+    }
+    
+    return summary;
   } catch (error) {
     console.error("Error summarizing text:", error);
     throw error;
@@ -125,8 +173,19 @@ async function processYouTubeVideo(youtubeUrl) {
     await fs.mkdir(tempDir, { recursive: true });
     
     const audioPath = await downloadAudio(youtubeUrl);
+    console.log("Audio downloaded to:", audioPath);
+    
     const transcription = await transcribeAudio(audioPath);
+    console.log("Got transcription:", transcription);
+    
     const summary = await summarizeText(transcription);
+    console.log("Got summary:", summary);
+    
+    if (!summary || typeof summary !== 'string' || summary.trim().length === 0) {
+      console.error('Invalid summary format:', summary);
+      throw new Error('לא נמצא סיכום');
+    }
+    
     const pdfPath = path.join(tempDir, 'summary.pdf');
     await createSummaryPDF(summary, pdfPath);
     

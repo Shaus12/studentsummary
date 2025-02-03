@@ -12,6 +12,11 @@ import { transcribeAudio, summarizeText, createSummaryPDF } from './Transcribe_a
 import { unlink } from 'fs/promises';
 import multer from 'multer';
 import { existsSync, mkdirSync } from 'fs';
+import PDFDocument from 'pdfkit';
+import { createClient } from '@deepgram/sdk';
+import { GoogleGenerativeAI } from '@google/generative-ai';
+import fs from 'fs';
+import puppeteer from 'puppeteer';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -42,6 +47,13 @@ const db = new pg.Client({
 });
 
 const client = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
+
+// Add Deepgram configuration
+const deepgramApiKey = '4c49363a81b1798d6402a3224e7b526e4d5ce0f4';
+const deepgram = createClient(deepgramApiKey);
+
+// Configure Gemini
+const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 
 try {
   await db.connect();
@@ -299,7 +311,15 @@ app.post("/api/google-login", async (req, res) => {
 
 app.post("/api/process-youtube", async (req, res) => {
   try {
-    const { youtubeUrl } = req.body;
+    const { url } = req.body;
+    
+    // Add validation
+    if (!url || url.trim() === '') {
+      return res.status(400).json({ error: 'No URL provided' });
+    }
+
+    console.log('Received URL:', url); // Add this log
+    
     const token = req.headers.authorization?.split(' ')[1];
     if (!token) {
       return res.status(401).json({ message: "No authorization token provided" });
@@ -308,7 +328,7 @@ app.post("/api/process-youtube", async (req, res) => {
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
     const userEmail = decoded.email;
 
-    const result = await processYouTubeVideo(youtubeUrl);
+    const result = await processYouTubeVideo(url);
     
     // Save to database with title
     const query = `
@@ -319,7 +339,7 @@ app.post("/api/process-youtube", async (req, res) => {
     
     await db.query(query, [
       userEmail,
-      youtubeUrl,
+      url,
       result.summary,
       result.pdfPath,
       result.title
@@ -328,10 +348,7 @@ app.post("/api/process-youtube", async (req, res) => {
     res.json(result);
   } catch (error) {
     console.error('Error processing YouTube video:', error);
-    res.status(500).json({ 
-      message: "Error processing video",
-      error: error.message 
-    });
+    res.status(500).json({ error: error.message });
   }
 });
 
@@ -370,64 +387,48 @@ app.get("/api/summaries", async (req, res) => {
   }
 });
 
-app.post("/api/process-audio", upload.single('audioFile'), async (req, res) => {
+app.post('/api/process-audio', upload.single('audioFile'), async (req, res) => {
   try {
-    const token = req.headers.authorization?.split(' ')[1];
-    if (!token) {
-      return res.status(401).json({ message: "No authorization token provided" });
+    const file = req.file;
+    if (!file) {
+      return res.status(400).json({ error: 'No audio file uploaded' });
     }
 
-    const decoded = jwt.verify(token, process.env.JWT_SECRET);
-    const userEmail = decoded.email;
+    // Read the file buffer
+    const audioBuffer = file.buffer;
 
-    // Check usage limits
-    const usageCheck = await checkAndUpdateUsage(userEmail);
-    if (!usageCheck.allowed) {
-      return res.status(403).json({ message: usageCheck.message });
+    // Use Deepgram instead of Whisper
+    const { result, error } = await deepgram.listen.prerecorded.transcribeFile(
+      audioBuffer,
+      {
+        model: 'whisper-large',
+        language: 'he',
+        smart_format: true,
+      }
+    );
+
+    if (error) {
+      console.error('Deepgram error:', error);
+      return res.status(500).json({ error: 'Error transcribing audio' });
     }
 
-    if (!req.file) {
-      return res.status(400).json({ message: "No file uploaded" });
-    }
+    const transcript = result.results.channels[0].alternatives[0].transcript;
 
-    const filePath = req.file.path;
+    // Save to database and generate PDF as before
+    const summary = await summarizeText(transcript);
+    const pdfPath = await generatePDF(summary);
     
-    // Process the audio file using the same functions as YouTube videos
-    const transcription = await transcribeAudio(filePath);
-    const summary = await summarizeText(transcription);
-    const pdfPath = path.join(path.dirname(filePath), 'summary.pdf');
-    await createSummaryPDF(summary, pdfPath);
-
     // Save to database
-    const query = `
-      INSERT INTO summaries (user_email, file_name, summary, pdf_path)
-      VALUES ($1, $2, $3, $4)
-      RETURNING *
-    `;
-    
-    const values = [
-      userEmail,
-      req.file.originalname,
-      summary,
-      '/files/summary.pdf'
-    ];
+    const userId = getUserIdFromToken(req);
+    await db.query(
+      'INSERT INTO summaries (user_id, summary, pdf_path) VALUES ($1, $2, $3)',
+      [userId, summary, pdfPath]
+    );
 
-    const dbResult = await db.query(query, values);
-
-    // Clean up the original audio file using the promise version
-    await unlink(filePath);
-
-    res.json({
-      summary: summary,
-      pdfPath: '/files/summary.pdf'
-    });
-
+    res.json({ summary, pdfPath });
   } catch (error) {
-    console.error('Error processing audio file:', error);
-    res.status(500).json({ 
-      message: "Error processing audio file",
-      error: error.message 
-    });
+    console.error('Error:', error);
+    res.status(500).json({ error: 'Error processing audio file' });
   }
 });
 
@@ -476,3 +477,74 @@ app.get("/api/usage-status", async (req, res) => {
 app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
 });
+
+const generatePDF = async (summary, title) => {
+  const browser = await puppeteer.launch();
+  const page = await browser.newPage();
+  
+  // Convert summary to HTML with proper RTL and styling
+  const points = summary
+    .split('-')
+    .map(point => point.trim())
+    .filter(point => point.length > 0);
+
+  const htmlContent = `
+    <!DOCTYPE html>
+    <html dir="rtl">
+    <head>
+      <meta charset="UTF-8">
+      <style>
+        @page {
+          margin: 50px;
+        }
+        body {
+          font-family: Arial, sans-serif;
+          padding: 40px;
+          direction: rtl;
+          line-height: 1.6;
+        }
+        h1 {
+          font-size: 24px;
+          margin-bottom: 30px;
+          text-align: right;
+        }
+        .points-container {
+          display: flex;
+          flex-direction: column;
+          gap: 20px;
+        }
+        .point {
+          font-size: 14px;
+          text-align: right;
+          padding-right: 20px;
+          position: relative;
+          display: block;
+          margin-bottom: 15px;
+          page-break-inside: avoid;
+        }
+        .point::before {
+          content: "•";
+          position: absolute;
+          right: 0;
+        }
+      </style>
+    </head>
+    <body>
+      <h1>${title || 'סיכום'}</h1>
+      <div class="points-container">
+        ${points.map(point => `<div class="point">${point}</div>`).join('')}
+      </div>
+    </body>
+    </html>
+  `;
+
+  await page.setContent(htmlContent);
+  const pdf = await page.pdf({
+    format: 'A4',
+    printBackground: true,
+    margin: { top: '50px', bottom: '50px', left: '50px', right: '50px' }
+  });
+
+  await browser.close();
+  return pdf;
+};

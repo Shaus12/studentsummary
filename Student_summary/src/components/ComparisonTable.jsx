@@ -1,42 +1,99 @@
 import React from 'react';
+import { Check, X } from 'lucide-react';
 
 const ComparisonTable = () => {
   const features = [
-    { name: 'איכות הסיכום', with: 'סיכום מדויק ותמציתי של כל החומר', without: 'החמצה של פרטים חשובים' },
-    { name: 'זמינות', with: 'זמין 24/7 לכל סיכום שתצטרכו', without: 'תלוי בסיכומים של אחרים' },
-    { name: 'התאמה אישית', with: 'התאמה מושלמת לסגנון הלמידה שלכם', without: 'פורמט קבוע ולא גמיש' },
-    { name: 'חווית למידה', with: 'למידה אינטראקטיבית וחכמה', without: 'למידה טכנית ומונוטונית' },
-    { name: 'עזרה נוספת', with: 'בינה מלאכותית מתקדמת שעונה על כל שאלה', without: 'מוגבל לתוכן הסיכום בלבד' }
+    {
+      name: "זמן סיכום חומר",
+      traditional: "3-4 שעות",
+      tachles: "2-3 דקות",
+    },
+    {
+      name: "דיוק בתוכן",
+      traditional: "תלוי בריכוז",
+      tachles: "דיוק של 95%",
+    },
+    {
+      name: "זמינות",
+      traditional: "מוגבל לשעות ערנות",
+      tachles: "24/7 זמינות",
+    },
+    {
+      name: "התאמה אישית",
+      traditional: "חד-גונית",
+      tachles: "מותאם לסגנון הלמידה שלך",
+    },
+    {
+      name: "ארגון מידע",
+      traditional: "ידני ומסורבל",
+      tachles: "אוטומטי ומאורגן",
+    }
   ];
 
   return (
-    <div className="py-16">
-      <div className="container mx-auto px-4">
-        <h2 className="text-2xl font-bold text-center mb-12">
-          סיכום בלי TachlesAI VS סיכום עם TachlesAI
-        </h2>
-        <div className="bg-white rounded-lg shadow-lg overflow-hidden">
-          <table className="w-full">
-            <thead>
-              <tr className="bg-gray-50">
-                <th className="px-6 py-3 text-right">קריטריון</th>
-                <th className="px-6 py-3 text-right text-indigo-600">עם TachlesAI</th>
-                <th className="px-6 py-3 text-right text-red-500">בלי TachlesAI</th>
-              </tr>
-            </thead>
-            <tbody>
-              {features.map((feature, index) => (
-                <tr key={index} className="border-t">
-                  <td className="px-6 py-4 font-medium">{feature.name}</td>
-                  <td className="px-6 py-4 text-indigo-600">{feature.with}</td>
-                  <td className="px-6 py-4 text-red-500">{feature.without}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+    <section className="py-24 bg-white">
+      <div className="max-w-7xl mx-auto px-8">
+        {/* Section Header */}
+        <div className="text-center mb-16">
+          <span className="text-indigo-600 font-semibold text-sm uppercase tracking-wide">
+            השוואה
+          </span>
+          <h2 className="mt-4 text-4xl font-bold text-gray-900">
+            למידה מסורתית מול TachlesAI
+          </h2>
+          <p className="mt-4 text-xl text-gray-600 max-w-2xl mx-auto">
+            ראה איך TachlesAI משנה את חווית הלמידה שלך לעומת השיטה המסורתית
+          </p>
+        </div>
+
+        {/* Comparison Table */}
+        <div className="overflow-hidden rounded-2xl shadow-lg border border-gray-100">
+          <div className="grid grid-cols-3 bg-gradient-to-r from-indigo-50 to-blue-50 p-6 font-semibold text-gray-900">
+            <div className="text-right">מאפיין</div>
+            <div className="text-center">למידה מסורתית</div>
+            <div className="text-center">TachlesAI</div>
+          </div>
+
+          {features.map((feature, index) => (
+            <div 
+              key={index}
+              className={`grid grid-cols-3 p-6 ${
+                index % 2 === 0 ? 'bg-white' : 'bg-gray-50'
+              }`}
+            >
+              <div className="text-right font-medium text-gray-900">
+                {feature.name}
+              </div>
+              <div className="text-center text-gray-600 flex items-center justify-center">
+                <span className="bg-red-50 text-red-700 px-4 py-1 rounded-full text-sm">
+                  {feature.traditional}
+                </span>
+              </div>
+              <div className="text-center text-gray-600 flex items-center justify-center">
+                <span className="bg-green-50 text-green-700 px-4 py-1 rounded-full text-sm">
+                  {feature.tachles}
+                </span>
+              </div>
+            </div>
+          ))}
+        </div>
+
+        {/* Call to Action */}
+        <div className="mt-16 text-center">
+          <div className="bg-gradient-to-r from-indigo-600 to-blue-600 rounded-2xl p-12 shadow-xl">
+            <h3 className="text-3xl font-bold text-white mb-6">
+              מוכן לחוות את העתיד של הלמידה?
+            </h3>
+            <p className="text-indigo-100 mb-8 text-lg">
+              הצטרף לאלפי סטודנטים שכבר משתמשים ב-TachlesAI ומשפרים את הלמידה שלהם
+            </p>
+            <button className="bg-white text-indigo-600 px-8 py-4 rounded-xl hover:bg-indigo-50 transition-all transform hover:scale-105 shadow-lg hover:shadow-xl font-medium text-lg">
+              התחל להשתמש בחינם ←
+            </button>
+          </div>
         </div>
       </div>
-    </div>
+    </section>
   );
 };
 
