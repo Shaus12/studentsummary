@@ -24,24 +24,35 @@ async function transcribeAudio(filePath, retries = 3, delay = 5000) {
     );
 
     if (error) {
-      throw new Error('Deepgram transcription failed: ' + error);
+      throw new Error('תמלול נכשל: ' + error);
     }
 
     return result.results.channels[0].alternatives[0].transcript;
   } catch (error) {
-    console.error("Error transcribing audio:", error);
+    console.error("תמלול נכשל:", error);
     throw error;
   }
 }
 
 // Updated Summarization Function using Gemini
-async function summarizeText(text) {
+async function summarizeText(text, summaryType = 'medium') {
   try {
+    console.log("Starting summarization with Gemini...");
+    console.log("Summary type:", summaryType);
+    
+    const summaryTypes = {
+      'transcription': 'תמלל את הטקסט הבא בעברית בדיוק כפי שהוא, בלי לסכם:',
+      'extended': 'סכם את הטקסט הבא בעברית באופן מורחב ומפורט, כולל דוגמאות ונקודות משנה:',
+      'medium': 'סכם את הטקסט הבא בעברית באופן בינוני, עם הנקודות העיקריות:',
+      'general': 'תן סיכום כללי בעברית של הטקסט הבא, התמקד ברעיונות המרכזיים:',
+      'short': 'תן סיכום קצר וממוקד בעברית של הטקסט הבא, רק את הנקודות החשובות ביותר:'
+    };
+
     const generationConfig = {
       temperature: 1,
       topP: 0.95,
       topK: 40,
-      maxOutputTokens: 8192,
+      maxOutputTokens: summaryType === 'transcription' ? 16384 : 8192,
     };
 
     const model = genAI.getGenerativeModel({
@@ -53,11 +64,11 @@ async function summarizeText(text) {
       history: [],
     });
 
-    const prompt = `Please summarize the following text in Hebrew, using bullet points:
+    const prompt = `${summaryTypes[summaryType]}
     
     ${text}
     
-    Please make the summary concise and clear, focusing on the main points.`;
+    אנא הצג את התוצאה בנקודות עם סימן • בתחילת כל שורה.`;
 
     const result = await chat.sendMessage(prompt);
     return result.response.text;

@@ -72,16 +72,24 @@ export async function transcribeAudio(filePath) {
   }
 }
 
-export async function summarizeText(text) {
+export async function summarizeText(text, summaryType = 'medium') {
   try {
     console.log("Starting summarization with Gemini...");
-    console.log("Text to summarize:", text);
+    console.log("Summary type:", summaryType);
     
+    const summaryTypes = {
+      'transcription': 'תמלל את הטקסט הבא בעברית בדיוק כפי שהוא, בלי לסכם:',
+      'extended': 'סכם את הטקסט הבא בעברית באופן מורחב ומפורט, כולל דוגמאות ונקודות משנה:',
+      'medium': 'סכם את הטקסט הבא בעברית באופן בינוני, עם הנקודות העיקריות:',
+      'general': 'תן סיכום כללי בעברית של הטקסט הבא, התמקד ברעיונות המרכזיים:',
+      'short': 'תן סיכום קצר וממוקד בעברית של הטקסט הבא, רק את הנקודות החשובות ביותר:'
+    };
+
     const generationConfig = {
       temperature: 1,
       topP: 0.95,
       topK: 40,
-      maxOutputTokens: 8192,
+      maxOutputTokens: summaryType === 'transcription' ? 16384 : 8192,
     };
 
     const model = genAI.getGenerativeModel({
@@ -89,17 +97,16 @@ export async function summarizeText(text) {
       generationConfig,
     });
 
-    const prompt = `Please summarize the following text in Hebrew, using bullet points:
+    const prompt = `${summaryTypes[summaryType]}
     
     ${text}
     
-    Please make the summary concise and clear, focusing on the main points.`;
+    אנא הצג את התוצאה בנקודות עם סימן • בתחילת כל שורה.`;
 
     const result = await model.generateContent(prompt);
     
-    // Access the text from the first candidate's content parts
     const summary = result.response.candidates[0].content.parts.map(part => part.text).join(' ');
-    console.log("Raw Gemini response:", result.response);  // Log the full response
+    console.log("Raw Gemini response:", result.response);
     console.log("Summarization completed! Result:", summary);
     
     if (!summary || typeof summary !== 'string' || summary.trim().length === 0) {
@@ -160,9 +167,10 @@ export async function createSummaryPDF(summary, outputPath) {
   }
 }
 
-async function processYouTubeVideo(youtubeUrl) {
+export async function processYouTubeVideo(youtubeUrl, summaryType = 'medium') {
   try {
     console.log(`Processing YouTube video: ${youtubeUrl}`);
+    console.log(`Summary type requested: ${summaryType}`);
     
     const shortsPattern = /\/shorts\//;
     if (shortsPattern.test(youtubeUrl)) {
@@ -178,7 +186,7 @@ async function processYouTubeVideo(youtubeUrl) {
     const transcription = await transcribeAudio(audioPath);
     console.log("Got transcription:", transcription);
     
-    const summary = await summarizeText(transcription);
+    const summary = await summarizeText(transcription, summaryType);
     console.log("Got summary:", summary);
     
     if (!summary || typeof summary !== 'string' || summary.trim().length === 0) {

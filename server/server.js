@@ -311,15 +311,12 @@ app.post("/api/google-login", async (req, res) => {
 
 app.post("/api/process-youtube", async (req, res) => {
   try {
-    const { url } = req.body;
+    const { url, summaryType } = req.body;
     
-    // Add validation
     if (!url || url.trim() === '') {
       return res.status(400).json({ error: 'No URL provided' });
     }
 
-    console.log('Received URL:', url); // Add this log
-    
     const token = req.headers.authorization?.split(' ')[1];
     if (!token) {
       return res.status(401).json({ message: "No authorization token provided" });
@@ -328,22 +325,15 @@ app.post("/api/process-youtube", async (req, res) => {
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
     const userEmail = decoded.email;
 
-    const result = await processYouTubeVideo(url);
+    const result = await processYouTubeVideo(url, summaryType);
     
-    // Save to database with title
     const query = `
       INSERT INTO summaries (user_email, video_url, summary, pdf_path, title)
       VALUES ($1, $2, $3, $4, $5)
       RETURNING *
     `;
     
-    await db.query(query, [
-      userEmail,
-      url,
-      result.summary,
-      result.pdfPath,
-      result.title
-    ]);
+    await db.query(query, [userEmail, url, result.summary, result.pdfPath, result.title]);
 
     res.json(result);
   } catch (error) {
