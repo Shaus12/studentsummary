@@ -15,6 +15,14 @@ const StudentDashboard = () => {
   const [file, setFile] = useState(null);
   const [usageData, setUsageData] = useState(null);
   const [selectedFile, setSelectedFile] = useState(null);
+  const [summaryOptions, setSummaryOptions] = useState({
+    style: 'detailed',
+    format: 'bullets',
+    language: 'he',
+    maxPoints: 10
+  });
+  const [outputType, setOutputType] = useState('summary');
+  const [isUsageLimitReached, setIsUsageLimitReached] = useState(false);
 
   useEffect(() => {
     const token = localStorage.getItem('token');
@@ -29,6 +37,26 @@ const StudentDashboard = () => {
     if (userData) {
       setUser(JSON.parse(userData));
     }
+
+    const checkUsageLimit = async () => {
+      try {
+        const token = localStorage.getItem('token');
+        const response = await fetch('http://localhost:5001/api/usage-status', {
+          headers: {
+            'Authorization': `Bearer ${token}`
+          }
+        });
+        const data = await response.json();
+        
+        if (data.membershipType === 'free' && data.remainingUses <= 0) {
+          setIsUsageLimitReached(true);
+        }
+      } catch (error) {
+        console.error('Error checking usage limit:', error);
+      }
+    };
+
+    checkUsageLimit();
   }, [navigate]);
 
   const fetchSummaries = async () => {
@@ -147,8 +175,7 @@ const StudentDashboard = () => {
     setLoading(true);
     try {
       const token = localStorage.getItem('token');
-      
-      console.log('Sending URL:', youtubeUrl);
+      console.log('Sending request...'); // Debug log
       
       const response = await fetch('http://localhost:5001/api/process-youtube', {
         method: 'POST',
@@ -157,16 +184,31 @@ const StudentDashboard = () => {
           'Authorization': `Bearer ${token}`
         },
         body: JSON.stringify({ 
-          url: youtubeUrl.trim() 
+          url: youtubeUrl.trim(),
+          outputType,
+          summaryOptions: outputType === 'summary' ? summaryOptions : undefined
         })
       });
 
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.message || 'Failed to process video');
+      const data = await response.json();
+      console.log('Response status:', response.status); // Debug log
+      console.log('Response data:', data); // Debug log
+
+      if (response.status === 403 || data.status === 'USAGE_LIMIT_REACHED') {
+        alert('נגמרו לך השימושים השבועיים! 🚫\n\n' +
+              'שדרג לחשבון פרימיום כדי לקבל:\n' +
+              '• שימוש בלתי מוגבל\n' +
+              '• תכונות נוספות\n' +
+              '• תמיכה בפיתוח הכלי\n\n' +
+              'לחץ OK כדי לשדרג! 🌟');
+        navigate('/upgrade');
+        return;
       }
 
-      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data.message || 'Error processing video');
+      }
+
       navigate('/summary-result', { 
         state: { 
           summary: data.summary,
@@ -175,7 +217,7 @@ const StudentDashboard = () => {
       });
     } catch (error) {
       console.error('Error:', error);
-      alert(error.message || 'Error processing video');
+      alert(error.message);
     } finally {
       setLoading(false);
     }
@@ -225,6 +267,13 @@ const StudentDashboard = () => {
               </div>
               
               <form onSubmit={handleYouTubeSubmit} className="flex flex-col items-center space-y-4 w-full max-w-md">
+                {isUsageLimitReached && (
+                  <div className="bg-yellow-100 border border-yellow-400 text-yellow-700 px-4 py-3 rounded relative" role="alert">
+                    <strong className="font-bold">שים לב! </strong>
+                    <span className="block sm:inline">נגמרו לך השימושים השבועיים. שדרג לפרימיום להמשך שימוש.</span>
+                  </div>
+                )}
+                {/* File Upload Section */}
                 <input 
                   type="text" 
                   value={youtubeUrl}
@@ -233,6 +282,7 @@ const StudentDashboard = () => {
                   className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:border-blue-500 focus:ring-1 focus:ring-blue-500 font-sans"
                   required
                 />
+                
                 <span className="text-gray-500 font-sans">- או -</span>
                 
                 <input
@@ -246,13 +296,98 @@ const StudentDashboard = () => {
                     file:bg-blue-50 file:text-blue-700
                     hover:file:bg-blue-100"
                 />
-                
+
+                {/* Summary Options Section */}
+                <div className="w-full space-y-3 mt-6 border-t pt-6">
+                  <h3 className="text-lg font-medium mb-4">אפשרויות עיבוד</h3>
+                  
+                  <div className="flex gap-4 mb-4">
+                    <label className="flex items-center">
+                      <input
+                        type="radio"
+                        name="outputType"
+                        value="summary"
+                        checked={outputType === 'summary'}
+                        onChange={(e) => setOutputType(e.target.value)}
+                        className="ml-2"
+                      />
+                      <span className="text-sm text-gray-600">סיכום</span>
+                    </label>
+                    <label className="flex items-center">
+                      <input
+                        type="radio"
+                        name="outputType"
+                        value="transcription"
+                        checked={outputType === 'transcription'}
+                        onChange={(e) => setOutputType(e.target.value)}
+                        className="ml-2"
+                      />
+                      <span className="text-sm text-gray-600">תמלול בלבד</span>
+                    </label>
+                  </div>
+
+                  {/* Show summary options only if summary is selected */}
+                  {outputType === 'summary' && (
+                    <>
+                      <h3 className="text-lg font-medium mb-4">אפשרויות סיכום</h3>
+                      
+                      <div className="flex flex-col">
+                        <label className="text-sm text-gray-600 mb-1">סגנון סיכום</label>
+                        <select 
+                          value={summaryOptions.style}
+                          onChange={(e) => setSummaryOptions({...summaryOptions, style: e.target.value})}
+                          className="px-4 py-2 border border-gray-300 rounded-lg focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+                        >
+                          <option value="detailed">מפורט</option>
+                          <option value="concise">תמציתי</option>
+                        </select>
+                      </div>
+
+                      <div className="flex flex-col">
+                        <label className="text-sm text-gray-600 mb-1">פורמט</label>
+                        <select 
+                          value={summaryOptions.format}
+                          onChange={(e) => setSummaryOptions({...summaryOptions, format: e.target.value})}
+                          className="px-4 py-2 border border-gray-300 rounded-lg focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+                        >
+                          <option value="bullets">נקודות</option>
+                          <option value="paragraphs">פסקאות</option>
+                        </select>
+                      </div>
+
+                      <div className="flex flex-col">
+                        <label className="text-sm text-gray-600 mb-1">שפה</label>
+                        <select 
+                          value={summaryOptions.language}
+                          onChange={(e) => setSummaryOptions({...summaryOptions, language: e.target.value})}
+                          className="px-4 py-2 border border-gray-300 rounded-lg focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+                        >
+                          <option value="he">עברית</option>
+                          <option value="en">אנגלית</option>
+                        </select>
+                      </div>
+
+                      <div className="flex flex-col">
+                        <label className="text-sm text-gray-600 mb-1">מספר נקודות מקסימלי</label>
+                        <input 
+                          type="number"
+                          min="1"
+                          value={summaryOptions.maxPoints}
+                          onChange={(e) => setSummaryOptions({...summaryOptions, maxPoints: parseInt(e.target.value)})}
+                          className="px-4 py-2 border border-gray-300 rounded-lg focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+                        />
+                      </div>
+                    </>
+                  )}
+                </div>
+
                 <button 
                   type="submit"
-                  disabled={loading || (!youtubeUrl && !file)}
-                  className={`px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors w-full font-sans ${loading || (!youtubeUrl && !file) ? 'opacity-50 cursor-not-allowed' : ''}`}
+                  disabled={loading || (!youtubeUrl && !file) || isUsageLimitReached}
+                  className={`px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors w-full font-sans 
+                    ${(loading || (!youtubeUrl && !file) || isUsageLimitReached) ? 'opacity-50 cursor-not-allowed' : ''}`}
                 >
-                  {loading ? 'מעבד...' : 'עבד קובץ'}
+                  {loading ? 'מעבד...' : isUsageLimitReached ? 'שדרג לפרימיום' : 'עבד קובץ'}
                 </button>
               </form>
 

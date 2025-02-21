@@ -16,15 +16,117 @@ body {
 
 .signup-container {
   display: flex;
-  flex-direction: column; /* Stack elements vertically */
-  justify-content: center;
+  flex-direction: column;
   align-items: center;
-  background: white;
-  border-radius: 16px;
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.1);
-  width: 100%; /* Adjusted for a more natural width */
-  /*max-width: 100%; /* Maximum width for larger screens */
-  padding: 2rem; /* Reduced padding to fit content better */
+  justify-content: flex-start;
+  min-height: 100vh;
+  width: 100vw;
+  background-color: white;
+  padding: 0;
+  margin: 0;
+}
+
+.signup-container * {
+  box-sizing: border-box;
+}
+
+.signup-container form {
+  width: 100%;
+  min-height: 100vh;
+  background-color: white;
+  padding: 60px 40px 80px 40px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 20px;
+}
+
+.signup-container h2 {
+  font-size: 32px;
+  font-weight: bold;
+  text-align: center;
+  margin-top: 40px;
+  margin-bottom: 40px;
+  color: #1a365d;
+}
+
+.signup-container .form-group {
+  width: 100%;
+  max-width: 400px;
+  margin-bottom: 20px;
+}
+
+.signup-container label {
+  display: block;
+  margin-bottom: 10px;
+  text-align: right;
+  font-size: 16px;
+  color: #374151;
+}
+
+.signup-container input {
+  width: 100%;
+  padding: 14px;
+  border: 2px solid #e5e7eb;
+  border-radius: 8px;
+  outline: none;
+  font-size: 16px;
+  transition: border-color 0.2s;
+}
+
+.signup-container button {
+  width: 100%;
+  max-width: 400px;
+  padding: 16px;
+  background-color: #2563eb;
+  color: white;
+  border: none;
+  border-radius: 8px;
+  font-size: 16px;
+  font-weight: bold;
+  cursor: pointer;
+  transition: background-color 0.2s;
+  margin-top: 20px;
+}
+
+.signup-container button:disabled {
+  background-color: #93c5fd;
+  cursor: not-allowed;
+}
+
+.signup-container .error-message {
+  width: 100%;
+  max-width: 400px;
+  background-color: #fee2e2;
+  color: #dc2626;
+  padding: 16px;
+  border-radius: 8px;
+  text-align: center;
+  font-size: 16px;
+  margin-bottom: 20px;
+}
+
+.signup-container .login-link {
+  margin-top: 40px;
+  margin-bottom: 40px;
+  text-align: center;
+  color: #6b7280;
+  font-size: 16px;
+  background: none;
+}
+
+.signup-container .login-link a {
+  color: #2563eb;
+  text-decoration: none;
+  font-weight: bold;
+  background: none;
+}
+
+/* Add this to ensure form content is centered and has proper width */
+.signup-container form > div {
+  width: 100%;
+  max-width: 400px;
+  margin: 0 auto;
 }
 
 .signup-form {
@@ -160,4 +262,10 @@ button:hover {
     font-size: 1.8rem;
     color: blue;
   }
+}
+
+/* Add this new style to create a white background wrapper */
+.signup-container > * {
+  background-color: white;
+  width: 100%;
 }

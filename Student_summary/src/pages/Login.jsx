@@ -1,42 +1,33 @@
 import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { GoogleLogin } from '@react-oauth/google';
-import '../styles/Login.css';
 
 function Login() {
   const navigate = useNavigate();
-  const [formData, setFormData] = useState({
-    email: '',
-    password: ''
-  });
+  const [formData, setFormData] = useState({ email: '', password: '' });
   const [error, setError] = useState('');
   const [success, setSuccess] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError('');
     setSuccess(false);
+    setIsLoading(true);
     
     try {
       const response = await fetch('http://localhost:5001/api/login', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(formData)
       });
 
       const data = await response.json();
 
       if (response.ok) {
-        // Store the token in localStorage
         localStorage.setItem('token', data.token);
         localStorage.setItem('user', JSON.stringify(data.user));
-        
-        // Show success message
         setSuccess(true);
-
-        // Redirect to main page after 2 seconds
         setTimeout(() => {
           navigate('/');
           window.location.reload();
@@ -47,6 +38,8 @@ function Login() {
     } catch (error) {
       console.error('Error:', error);
       setError('שגיאה בהתחברות');
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -91,72 +84,192 @@ function Login() {
   };
 
   return (
-    <div className="login-container">
-      <form className="login-form" onSubmit={handleSubmit}>
-        <h2>התחברות</h2>
-        
-        {error && (
-          <div className="error-message text-red-500 mb-4">
-            {error}
+    <div className="login-page" style={{
+      display: 'flex',
+      flexDirection: 'column',
+      alignItems: 'center',
+      justifyContent: 'center',
+      minHeight: '100vh',
+      width: '100vw',
+      backgroundColor: '#f0f4f8',
+      padding: '0',
+      margin: '0'
+    }}>
+      <div style={{
+        width: '100%',
+        height: '100vh',
+        backgroundColor: 'white',
+        padding: '40px',
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'center',
+        justifyContent: 'center'
+      }}>
+        <h2 style={{
+          fontSize: '32px',
+          fontWeight: 'bold',
+          textAlign: 'center',
+          marginBottom: '40px',
+          color: '#1a365d'
+        }}>
+          התחברות לחשבון
+        </h2>
+
+        <div style={{
+          width: '100%',
+          maxWidth: '400px',
+          margin: '0 auto'
+        }}>
+          <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
+            {error && (
+              <div style={{
+                backgroundColor: '#fee2e2',
+                color: '#dc2626',
+                padding: '16px',
+                borderRadius: '8px',
+                textAlign: 'center',
+                fontSize: '16px'
+              }}>
+                {error}
+              </div>
+            )}
+
+            {success && (
+              <div style={{
+                backgroundColor: '#dcfce7',
+                color: '#16a34a',
+                padding: '16px',
+                borderRadius: '8px',
+                textAlign: 'center',
+                fontSize: '16px'
+              }}>
+                התחברת בהצלחה! מעביר אותך לדף הבית...
+              </div>
+            )}
+
+            <div>
+              <label style={{
+                display: 'block',
+                marginBottom: '10px',
+                textAlign: 'right',
+                fontSize: '16px',
+                color: '#374151'
+              }}>
+                אימייל
+              </label>
+              <input
+                type="email"
+                value={formData.email}
+                onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                required
+                style={{
+                  width: '100%',
+                  padding: '14px',
+                  border: '2px solid #e5e7eb',
+                  borderRadius: '8px',
+                  outline: 'none',
+                  fontSize: '16px',
+                  transition: 'border-color 0.2s',
+                }}
+              />
+            </div>
+
+            <div>
+              <label style={{
+                display: 'block',
+                marginBottom: '10px',
+                textAlign: 'right',
+                fontSize: '16px',
+                color: '#374151'
+              }}>
+                סיסמה
+              </label>
+              <input
+                type="password"
+                value={formData.password}
+                onChange={(e) => setFormData({ ...formData, password: e.target.value })}
+                required
+                style={{
+                  width: '100%',
+                  padding: '14px',
+                  border: '2px solid #e5e7eb',
+                  borderRadius: '8px',
+                  outline: 'none',
+                  fontSize: '16px',
+                  transition: 'border-color 0.2s',
+                }}
+              />
+            </div>
+
+            <button
+              type="submit"
+              disabled={isLoading || success}
+              style={{
+                backgroundColor: isLoading || success ? '#93c5fd' : '#2563eb',
+                color: 'white',
+                padding: '16px',
+                borderRadius: '8px',
+                border: 'none',
+                cursor: isLoading || success ? 'not-allowed' : 'pointer',
+                marginTop: '20px',
+                fontSize: '16px',
+                fontWeight: 'bold',
+                transition: 'background-color 0.2s'
+              }}
+            >
+              {isLoading ? 'מתחבר...' : 'התחבר'}
+            </button>
+          </form>
+
+          <div style={{
+            margin: '40px 0',
+            textAlign: 'center',
+            position: 'relative'
+          }}>
+            <div style={{
+              borderBottom: '1px solid #e5e7eb',
+              position: 'absolute',
+              width: '100%',
+              top: '50%'
+            }}></div>
+            <span style={{
+              backgroundColor: 'white',
+              padding: '0 20px',
+              color: '#6b7280',
+              position: 'relative',
+              fontSize: '16px'
+            }}>
+              או המשך עם
+            </span>
           </div>
-        )}
 
-        {success && (
-          <div className="success-message text-green-500 mb-4">
-            התחברת בהצלחה! מעביר אותך לדף הבית...
+          <div style={{ display: 'flex', justifyContent: 'center', marginBottom: '30px' }}>
+            <GoogleLogin
+              onSuccess={handleGoogleSuccess}
+              onError={() => setError('שגיאה בהתחברות עם גוגל')}
+              theme="outline"
+              size="large"
+              text="continue_with"
+              useOneTap
+            />
           </div>
-        )}
 
-        <div className="form-group">
-          <label htmlFor="email">אימייל:</label>
-          <input
-            type="email"
-            id="email"
-            name="email"
-            value={formData.email}
-            onChange={handleChange}
-            required
-          />
+          <p style={{ 
+            textAlign: 'center', 
+            color: '#6b7280',
+            fontSize: '16px'
+          }}>
+            אין לך חשבון?{' '}
+            <Link to="/signup" style={{ 
+              color: '#2563eb', 
+              textDecoration: 'none',
+              fontWeight: 'bold'
+            }}>
+              הרשם עכשיו
+            </Link>
+          </p>
         </div>
-
-        <div className="form-group">
-          <label htmlFor="password">סיסמה:</label>
-          <input
-            type="password"
-            id="password"
-            name="password"
-            value={formData.password}
-            onChange={handleChange}
-            required
-          />
-        </div>
-
-        <button 
-          type="submit" 
-          disabled={success}
-          className={success ? 'bg-gray-400' : ''}
-        >
-          התחבר
-        </button>
-
-        <div className="mt-4 text-center">
-          <p className="text-gray-600 mb-2">או</p>
-          <GoogleLogin
-            onSuccess={handleGoogleSuccess}
-            onError={() => {
-              setError('שגיאה בהתחברות עם גוגל');
-            }}
-            theme="outline"
-            size="large"
-            text="continue_with"
-            useOneTap
-          />
-        </div>
-
-        <div className="signup-link">
-          אין לך חשבון? <Link to="/signup" className="text-indigo-600 hover:text-indigo-700">הרשם כאן</Link>
-        </div>
-      </form>
+      </div>
     </div>
   );
 }

@@ -72,7 +72,7 @@ export async function transcribeAudio(filePath) {
   }
 }
 
-export async function summarizeText(text) {
+export async function summarizeText(text, summaryOptions = {}) {
   try {
     console.log("Starting summarization with Gemini...");
     console.log("Text to summarize:", text);
@@ -89,18 +89,47 @@ export async function summarizeText(text) {
       generationConfig,
     });
 
-    const prompt = `Please summarize the following text in Hebrew, using bullet points:
+    // Default summary instructions
+    const defaultInstructions = [
+      "יש להשתמש בעברית בלבד, למעט שמות פרטיים, מונחים טכניים או שמות של טכנולוגיות שאין להם תרגום מקובל לעברית",
+      "יש לכתוב כל נקודה עיקרית עם תבליט (•) בתחילתה",
+      "לכל נקודה עיקרית יש להוסיף 2-3 פרטים ספציפיים או דוגמאות",
+      "יש לשמור על סדר כרונולוגי של הדברים כפי שהוצגו בטקסט המקורי",
+      "יש לכלול מספרים, שמות ונתונים מדויקים שהוזכרו"
+    ];
+
+    // Merge default options with user options
+    const {
+      style = 'detailed', // 'detailed' or 'concise'
+      format = 'bullets', // 'bullets' or 'paragraphs'
+      additionalInstructions = [],
+      maxPoints = 10, // maximum number of main points
+      language = 'he' // 'he' for Hebrew or 'en' for English
+    } = summaryOptions;
+
+    // Build custom instructions based on options
+    let customInstructions = [...defaultInstructions, ...additionalInstructions];
     
+    if (style === 'concise') {
+      customInstructions.push(`יש להגביל את הסיכום ל-${maxPoints} נקודות עיקריות`);
+    }
+
+    if (format === 'paragraphs') {
+      customInstructions = customInstructions.filter(inst => !inst.includes('תבליט'));
+      customInstructions.push('יש לכתוב את הסיכום בפסקאות קצרות ומובנות');
+    }
+
+    const prompt = `אנא סכם את הטקסט הבא ${language === 'he' ? 'בעברית' : 'באנגלית'} באופן ${style === 'detailed' ? 'מפורט' : 'תמציתי'}:
+
     ${text}
     
-    Please make the summary concise and clear, focusing on the main points.`;
+    הנחיות לסיכום:
+    ${customInstructions.map((inst, index) => `${index + 1}. ${inst}`).join('\n')}
+    
+    אנא הקפד על סיכום ${style === 'detailed' ? 'מפורט' : 'תמציתי'} ומדויק תוך שמירה על בהירות המידע.`;
 
     const result = await model.generateContent(prompt);
-    
-    // Access the text from the first candidate's content parts
     const summary = result.response.candidates[0].content.parts.map(part => part.text).join(' ');
-    console.log("Raw Gemini response:", result.response);  // Log the full response
-    console.log("Summarization completed! Result:", summary);
     
     if (!summary || typeof summary !== 'string' || summary.trim().length === 0) {
       throw new Error('Invalid summary format received from Gemini');
@@ -115,6 +144,14 @@ export async function summarizeText(text) {
 
 export async function createSummaryPDF(summary, outputPath) {
   try {
+    // Convert the summary text into HTML with line breaks and bullet points
+    const formattedSummary = summary
+      .split('•')
+      .map(point => point.trim())
+      .filter(point => point.length > 0)
+      .map(point => `<li>${point}</li>`)
+      .join('\n');  // Add newline for better readability
+
     const html = `
       <!DOCTYPE html>
       <html dir="rtl">
@@ -134,23 +171,36 @@ export async function createSummaryPDF(summary, outputPath) {
               line-height: 1.6;
               text-align: right;
             }
+            ul {
+              list-style-type: disc;
+              padding-right: 20px;
+              margin: 0;
+              padding: 0;
+            }
+            li {
+              margin-bottom: 10px;
+              text-align: right;
+            }
           </style>
         </head>
         <body>
           <h1>סיכום הקלטה</h1>
           <div class="summary">
-            ${summary}
+            <ul>
+              ${formattedSummary}
+            </ul>
           </div>
         </body>
       </html>
     `;
 
-    const browser = await puppeteer.launch({ headless: 'new' });
+    const browser = await puppeteer.launch({ headless: true });
     const page = await browser.newPage();
-    await page.setContent(html);
+    await page.setContent(html, { waitUntil: 'domcontentloaded' });  // Use 'domcontentloaded' to ensure content is loaded
     await page.pdf({
       path: outputPath,
       format: 'A4',
+      printBackground: true,
       margin: { top: '20mm', right: '20mm', bottom: '20mm', left: '20mm' }
     });
     await browser.close();
@@ -160,9 +210,10 @@ export async function createSummaryPDF(summary, outputPath) {
   }
 }
 
-async function processYouTubeVideo(youtubeUrl) {
+async function processYouTubeVideo(youtubeUrl, { outputType = 'summary', summaryOptions = {} } = {}) {
   try {
     console.log(`Processing YouTube video: ${youtubeUrl}`);
+    console.log('Output Type:', outputType);
     
     const shortsPattern = /\/shorts\//;
     if (shortsPattern.test(youtubeUrl)) {
@@ -178,11 +229,24 @@ async function processYouTubeVideo(youtubeUrl) {
     const transcription = await transcribeAudio(audioPath);
     console.log("Got transcription:", transcription);
     
-    const summary = await summarizeText(transcription);
+    // If only transcription is requested, return it without summarizing
+    if (outputType === 'transcription') {
+      const pdfPath = path.join(tempDir, 'transcription.pdf');
+      await createTranscriptionPDF(transcription, pdfPath);
+      
+      await fs.unlink(audioPath);
+      
+      return {
+        summary: transcription, // Using the same field for consistency
+        pdfPath: '/files/transcription.pdf'
+      };
+    }
+    
+    // If summary is requested, proceed with summarization
+    const summary = await summarizeText(transcription, summaryOptions);
     console.log("Got summary:", summary);
     
     if (!summary || typeof summary !== 'string' || summary.trim().length === 0) {
-      console.error('Invalid summary format:', summary);
       throw new Error('לא נמצא סיכום');
     }
     
@@ -197,6 +261,120 @@ async function processYouTubeVideo(youtubeUrl) {
     };
   } catch (error) {
     console.error("Error processing video:", error);
+    throw error;
+  }
+}
+
+// Add a new function to create PDF for transcription
+async function createTranscriptionPDF(transcription, outputPath) {
+  try {
+    // Use the same formatting logic as the summary
+    const formatTranscription = (text) => {
+      return text
+        .replace(/([.!?])\s*/g, '$1\n\n') // Add double line break after sentences
+        .replace(/([,:])\s*/g, '$1 ')    // Add space after commas and colons
+        .split('\n')
+        .filter(line => line.trim())
+        .join('\n\n');
+    };
+
+    const formattedTranscription = formatTranscription(transcription);
+
+    const html = `
+      <!DOCTYPE html>
+      <html dir="rtl">
+        <head>
+          <meta charset="UTF-8">
+          <style>
+            body {
+              font-family: Arial, sans-serif;
+              margin: 40px;
+              direction: rtl;
+              line-height: 1.8;
+              font-size: 16px;
+              color: #333;
+            }
+            h1 {
+              color: #1a1a1a;
+              text-align: center;
+              margin-bottom: 40px;
+              font-size: 28px;
+              border-bottom: 2px solid #eee;
+              padding-bottom: 20px;
+            }
+            .transcription-container {
+              max-width: 800px;
+              margin: 0 auto;
+              background-color: #ffffff;
+              padding: 30px;
+              border-radius: 12px;
+              box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+            }
+            .transcription {
+              text-align: right;
+              white-space: pre-wrap;
+              padding: 20px;
+              background-color: #f8f9fa;
+              border-radius: 8px;
+              line-height: 1.8;
+            }
+            .paragraph {
+              margin-bottom: 24px;
+              text-align: justify;
+              padding: 10px;
+              background-color: white;
+              border-radius: 6px;
+              box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+            }
+            .paragraph:last-child {
+              margin-bottom: 0;
+            }
+            @media print {
+              body {
+                margin: 20mm;
+              }
+              .transcription-container {
+                box-shadow: none;
+              }
+              .paragraph {
+                break-inside: avoid;
+              }
+            }
+          </style>
+        </head>
+        <body>
+          <div class="transcription-container">
+            <h1>תמלול הקלטה</h1>
+            <div class="transcription">
+              ${formattedTranscription.split('\n\n').map(paragraph => 
+                paragraph.trim() ? `<div class="paragraph">${paragraph}</div>` : ''
+              ).join('')}
+            </div>
+          </div>
+        </body>
+      </html>
+    `;
+
+    const browser = await puppeteer.launch({ headless: true });
+    const page = await browser.newPage();
+    await page.setContent(html, { waitUntil: 'networkidle0' });
+    await page.pdf({
+      path: outputPath,
+      format: 'A4',
+      printBackground: true,
+      margin: { top: '15mm', right: '15mm', bottom: '15mm', left: '15mm' },
+      displayHeaderFooter: true,
+      headerTemplate: '<div></div>',
+      footerTemplate: `
+        <div style="font-size: 10px; text-align: center; width: 100%;">
+          <span class="pageNumber"></span> מתוך <span class="totalPages"></span>
+        </div>
+      `,
+      footerHeight: '30mm'
+    });
+    await browser.close();
+  } catch (error) {
+    console.error('Error creating transcription PDF:', error);
     throw error;
   }
 }

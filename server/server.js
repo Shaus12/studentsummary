@@ -311,15 +311,6 @@ app.post("/api/google-login", async (req, res) => {
 
 app.post("/api/process-youtube", async (req, res) => {
   try {
-    const { url } = req.body;
-    
-    // Add validation
-    if (!url || url.trim() === '') {
-      return res.status(400).json({ error: 'No URL provided' });
-    }
-
-    console.log('Received URL:', url); // Add this log
-    
     const token = req.headers.authorization?.split(' ')[1];
     if (!token) {
       return res.status(401).json({ message: "No authorization token provided" });
@@ -328,26 +319,47 @@ app.post("/api/process-youtube", async (req, res) => {
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
     const userEmail = decoded.email;
 
-    const result = await processYouTubeVideo(url);
-    
-    // Save to database with title
-    const query = `
-      INSERT INTO summaries (user_email, video_url, summary, pdf_path, title)
-      VALUES ($1, $2, $3, $4, $5)
-      RETURNING *
-    `;
-    
-    await db.query(query, [
-      userEmail,
-      url,
-      result.summary,
-      result.pdfPath,
-      result.title
-    ]);
+    // Check if we need to reset the count (new month)
+    await db.query(`
+      UPDATE users 
+      SET usage_count = 0, 
+          last_reset = CURRENT_TIMESTAMP 
+      WHERE email = $1 
+        AND (EXTRACT(MONTH FROM NOW()) != EXTRACT(MONTH FROM last_reset) 
+             OR EXTRACT(YEAR FROM NOW()) != EXTRACT(YEAR FROM last_reset))
+    `, [userEmail]);
+
+    // Get current usage
+    const usageResult = await db.query(
+      "SELECT membership_type, usage_count FROM users WHERE email = $1",
+      [userEmail]
+    );
+    const user = usageResult.rows[0];
+
+    // Check usage limit
+    if (user.membership_type === 'free' && user.usage_count >= 10) {
+      return res.status(403).json({ 
+        status: 'USAGE_LIMIT_REACHED',
+        message: 'נגמרו לך השימושים החודשיים! שדרג לחשבון פרימיום כדי לקבל שימוש בלתי מוגבל'
+      });
+    }
+
+    // Process the video...
+    const { url, outputType, summaryOptions } = req.body;
+    const result = await processYouTubeVideo(url, {
+      outputType: outputType || 'summary',
+      summaryOptions
+    });
+
+    // Increment usage count
+    await db.query(
+      'UPDATE users SET usage_count = usage_count + 1 WHERE email = $1',
+      [userEmail]
+    );
 
     res.json(result);
   } catch (error) {
-    console.error('Error processing YouTube video:', error);
+    console.error('Error:', error);
     res.status(500).json({ error: error.message });
   }
 });
