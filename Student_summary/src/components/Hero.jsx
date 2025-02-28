@@ -25,13 +25,8 @@ const Hero = () => {
               </button>
               
               <div className="flex items-center justify-end space-x-4 space-x-reverse mt-8">
-                <div className="flex -space-x-4 space-x-reverse">
-                  <img className="w-10 h-10 rounded-full border-2 border-white" src="https://randomuser.me/api/portraits/men/1.jpg" alt="User" />
-                  <img className="w-10 h-10 rounded-full border-2 border-white" src="https://randomuser.me/api/portraits/women/2.jpg" alt="User" />
-                  <img className="w-10 h-10 rounded-full border-2 border-white" src="https://randomuser.me/api/portraits/men/3.jpg" alt="User" />
-                </div>
+                
                 <div className="text-sm text-gray-600">
-                  <span className="font-semibold">+1,000</span> סטודנטים כבר משתמשים
                 </div>
               </div>
             </div>

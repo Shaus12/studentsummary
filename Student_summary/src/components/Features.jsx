@@ -71,12 +71,11 @@ const Features = () => {
           ))}
         </div>
 
-        {/* Call to Action */}
-        <div className="mt-16 text-center">
-          <button className="bg-indigo-600 text-white px-8 py-4 rounded-xl hover:bg-indigo-700 transition-all transform hover:scale-105 shadow-lg hover:shadow-xl font-medium text-lg">
-            התחל להשתמש בחינם ←
-          </button>
-        </div>
+        <div className="flex justify-center">
+        <button className="cta-button px-6 py-3 text-base font-medium bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 w-64">
+          התחל עכשיו בחינם
+        </button>
+      </div>
       </div>
     </section>
   );

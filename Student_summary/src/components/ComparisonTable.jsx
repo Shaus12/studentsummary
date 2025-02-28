@@ -77,21 +77,6 @@ const ComparisonTable = () => {
             </div>
           ))}
         </div>
-
-        {/* Call to Action */}
-        <div className="mt-16 text-center">
-          <div className="bg-gradient-to-r from-indigo-600 to-blue-600 rounded-2xl p-12 shadow-xl">
-            <h3 className="text-3xl font-bold text-white mb-6">
-              מוכן לחוות את העתיד של הלמידה?
-            </h3>
-            <p className="text-indigo-100 mb-8 text-lg">
-              הצטרף לאלפי סטודנטים שכבר משתמשים ב-TachlesAI ומשפרים את הלמידה שלהם
-            </p>
-            <button className="bg-white text-indigo-600 px-8 py-4 rounded-xl hover:bg-indigo-50 transition-all transform hover:scale-105 shadow-lg hover:shadow-xl font-medium text-lg">
-              התחל להשתמש בחינם ←
-            </button>
-          </div>
-        </div>
       </div>
     </section>
   );
