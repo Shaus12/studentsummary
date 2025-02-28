@@ -24,10 +24,13 @@ const __dirname = path.dirname(__filename);
 dotenv.config();
 
 const app = express();
-const PORT = process.env.PORT || 5000;
+const PORT = process.env.PORT || 5001;
 
 app.use(express.json());
-app.use(cors());
+app.use(cors({
+  origin: ['http://207.154.192.212', 'http://207.154.192.212:5001'],
+  credentials: true
+}));
 
 // Create temp directory if it doesn't exist
 const tempDir = path.join(__dirname, 'temp');
@@ -486,7 +489,26 @@ app.get("/api/usage-status", async (req, res) => {
   }
 });
 
-app.listen(PORT, () => {
+// Add this route to test database connection
+app.get('/api/db-test', async (req, res) => {
+  try {
+    const result = await db.query('SELECT NOW()');
+    res.json({ 
+      success: true, 
+      message: 'Database connection successful',
+      time: result.rows[0].now 
+    });
+  } catch (error) {
+    console.error('Database connection error:', error);
+    res.status(500).json({ 
+      success: false, 
+      message: 'Database connection failed',
+      error: error.message 
+    });
+  }
+});
+
+app.listen(PORT, '0.0.0.0', () => {
   console.log(`Server running on port ${PORT}`);
 });
 
