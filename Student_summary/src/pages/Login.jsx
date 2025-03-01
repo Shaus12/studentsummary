@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { GoogleLogin } from '@react-oauth/google';
+import API_BASE_URL from '../config';
 
 function Login() {
   const navigate = useNavigate();
@@ -16,7 +17,7 @@ function Login() {
     setIsLoading(true);
     
     try {
-      const response = await fetch('http://localhost:5001/api/login', {
+      const response = await fetch(`${API_BASE_URL}/api/login`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(formData)
@@ -52,7 +53,7 @@ function Login() {
 
   const handleGoogleSuccess = async (credentialResponse) => {
     try {
-      const response = await fetch('http://localhost:5001/api/google-login', {
+      const response = await fetch(`${API_BASE_URL}/api/google-login`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
