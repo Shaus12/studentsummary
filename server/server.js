@@ -314,56 +314,67 @@ app.post("/api/google-login", async (req, res) => {
 
 app.post("/api/process-youtube", async (req, res) => {
   try {
-    const token = req.headers.authorization?.split(' ')[1];
-    if (!token) {
-      return res.status(401).json({ message: "No authorization token provided" });
+    const { youtubeUrl, outputType } = req.body;
+    console.log('Processing YouTube video:', youtubeUrl);
+    console.log('Output Type:', outputType);
+
+    // Import the functions we need
+    const { downloadYouTubeAudio } = await import('./Transcribe_and_summarize/DownloadFromYT.js');
+    const { transcribeAudio } = await import('./Transcribe_and_summarize/TranscribeAudio.js');
+    const { summarizeText } = await import('./Transcribe_and_summarize/SummarizeText.js');
+    const { generatePDF } = await import('./Transcribe_and_summarize/GeneratePDF.js');
+
+    // Process the YouTube video with our hybrid approach
+    const result = await downloadYouTubeAudio(youtubeUrl, path.join(__dirname, 'temp', 'audio.mp3'));
+    
+    let text;
+    
+    if (result.method === 'download') {
+      // If we successfully downloaded the audio, transcribe it
+      console.log('Audio downloaded successfully, transcribing...');
+      text = await transcribeAudio(result.outputPath);
+    } else if (result.method === 'transcript') {
+      // If we used the transcript API, use the transcript directly
+      console.log('Using transcript directly...');
+      text = result.transcript;
     }
 
+    // Generate summary or notes based on the output type
+    let output;
+    if (outputType === 'summary') {
+      output = await summarizeText(text);
+    } else if (outputType === 'notes') {
+      output = await generateNotes(text);
+    } else {
+      output = await summarizeText(text);
+    }
+
+    // Generate PDF
+    const pdfPath = await generatePDF(output);
+    
+    // Get user email from token
+    const token = req.headers.authorization?.split(' ')[1];
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
     const userEmail = decoded.email;
-
-    // Check if we need to reset the count (new month)
-    await db.query(`
-      UPDATE users 
-      SET usage_count = 0, 
-          last_reset = CURRENT_TIMESTAMP 
-      WHERE email = $1 
-        AND (EXTRACT(MONTH FROM NOW()) != EXTRACT(MONTH FROM last_reset) 
-             OR EXTRACT(YEAR FROM NOW()) != EXTRACT(YEAR FROM last_reset))
-    `, [userEmail]);
-
-    // Get current usage
-    const usageResult = await db.query(
-      "SELECT membership_type, usage_count FROM users WHERE email = $1",
-      [userEmail]
-    );
-    const user = usageResult.rows[0];
-
-    // Check usage limit
-    if (user.membership_type === 'free' && user.usage_count >= 10) {
-      return res.status(403).json({ 
-        status: 'USAGE_LIMIT_REACHED',
-        message: 'נגמרו לך השימושים החודשיים! שדרג לחשבון פרימיום כדי לקבל שימוש בלתי מוגבל'
-      });
-    }
-
-    // Process the video...
-    const { url, outputType, summaryOptions } = req.body;
-    const result = await processYouTubeVideo(url, {
-      outputType: outputType || 'summary',
-      summaryOptions
+    
+    // Save to database
+    const query = `
+      INSERT INTO summaries (user_email, video_url, summary, pdf_path)
+      VALUES ($1, $2, $3, $4)
+      RETURNING id
+    `;
+    const values = [userEmail, youtubeUrl, output, pdfPath];
+    const dbResult = await db.query(query, values);
+    
+    res.json({ 
+      success: true,
+      method: result.method,
+      summary: output,
+      pdfPath: pdfPath
     });
-
-    // Increment usage count
-    await db.query(
-      'UPDATE users SET usage_count = usage_count + 1 WHERE email = $1',
-      [userEmail]
-    );
-
-    res.json(result);
   } catch (error) {
     console.error('Error:', error);
-    res.status(500).json({ error: error.message });
+    res.status(500).json({ error: 'Error processing video: ' + error.message });
   }
 });
 

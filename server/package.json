@@ -13,7 +13,7 @@
   "dependencies": {
     "@deepgram/sdk": "^3.9.0",
     "@google/generative-ai": "^0.21.0",
-    "axios": "^1.7.9",
+    "axios": "^1.8.1",
     "bcrypt": "^5.1.0",
     "child_process": "^1.0.2",
     "cors": "^2.8.5",
@@ -28,6 +28,7 @@
     "pg": "^8.11.0",
     "puppeteer": "^24.1.1",
     "util": "^0.12.5",
-    "youtube-dl-exec": "^3.0.12"
+    "youtube-dl-exec": "^3.0.12",
+    "youtube-transcript-api": "^1.1.2"
   }
 }
