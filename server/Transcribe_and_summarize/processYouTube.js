@@ -413,8 +413,14 @@ export async function processYouTube(youtubeUrl, outputType) {
     if (outputType === 'summary') {
       output = await summarizeText(text);
     } else if (outputType === 'notes') {
-      const { generateNotes } = await import('./GenerateNotes.js');
-      output = await generateNotes(text);
+      // Import generateNotes only if needed
+      try {
+        const notesModule = await import('./GenerateNotes.js');
+        output = await notesModule.generateNotes(text);
+      } catch (error) {
+        console.error('Error importing GenerateNotes.js, falling back to summary:', error);
+        output = await summarizeText(text);
+      }
     } else {
       output = await summarizeText(text);
     }
