@@ -204,9 +204,10 @@ app.post("/api/signup", async (req, res) => {
 });
 
 app.post("/api/login", async (req, res) => {
-  const { email, password } = req.body;
-
   try {
+    console.log('Login request received:', req.body);
+    const { email, password } = req.body;
+
     const result = await db.query(
       "SELECT * FROM users WHERE email = $1",
       [email]
@@ -239,10 +240,9 @@ app.post("/api/login", async (req, res) => {
         membershipType: user.membership_type
       }
     });
-
-  } catch (err) {
-    console.error('Login error:', err);
-    res.status(500).json({ message: "Internal Server Error" });
+  } catch (error) {
+    console.error('Login error:', error);
+    res.status(500).json({ error: 'Login failed: ' + error.message });
   }
 });
 
@@ -320,60 +320,80 @@ app.post("/api/process-youtube", async (req, res) => {
 
     // Import the functions we need
     const { downloadYouTubeAudio } = await import('./Transcribe_and_summarize/DownloadFromYT.js');
-    const { transcribeAudio } = await import('./Transcribe_and_summarize/TranscribeAudio.js');
-    const { summarizeText } = await import('./Transcribe_and_summarize/SummarizeText.js');
-    const { generatePDF } = await import('./Transcribe_and_summarize/GeneratePDF.js');
+    
+    try {
+      // Process the YouTube video with our hybrid approach
+      console.log('Starting downloadYouTubeAudio...');
+      const result = await downloadYouTubeAudio(youtubeUrl, path.join(__dirname, 'temp', 'audio.mp3'));
+      console.log('downloadYouTubeAudio result:', result);
+      
+      let text;
+      
+      if (result.method === 'download') {
+        // If we successfully downloaded the audio, transcribe it
+        console.log('Audio downloaded successfully, transcribing...');
+        const { transcribeAudio } = await import('./Transcribe_and_summarize/TranscribeAudio.js');
+        text = await transcribeAudio(result.outputPath);
+      } else if (result.method === 'transcript') {
+        // If we used the transcript API, use the transcript directly
+        console.log('Using transcript directly...');
+        text = result.transcript;
+      }
 
-    // Process the YouTube video with our hybrid approach
-    const result = await downloadYouTubeAudio(youtubeUrl, path.join(__dirname, 'temp', 'audio.mp3'));
-    
-    let text;
-    
-    if (result.method === 'download') {
-      // If we successfully downloaded the audio, transcribe it
-      console.log('Audio downloaded successfully, transcribing...');
-      text = await transcribeAudio(result.outputPath);
-    } else if (result.method === 'transcript') {
-      // If we used the transcript API, use the transcript directly
-      console.log('Using transcript directly...');
-      text = result.transcript;
+      console.log('Text obtained, length:', text?.length);
+      
+      // Generate summary or notes based on the output type
+      const { summarizeText } = await import('./Transcribe_and_summarize/SummarizeText.js');
+      const { generatePDF } = await import('./Transcribe_and_summarize/GeneratePDF.js');
+      
+      let output;
+      if (outputType === 'summary') {
+        output = await summarizeText(text);
+      } else if (outputType === 'notes') {
+        const { generateNotes } = await import('./Transcribe_and_summarize/GenerateNotes.js');
+        output = await generateNotes(text);
+      } else {
+        output = await summarizeText(text);
+      }
+
+      console.log('Summary generated, length:', output?.length);
+      
+      // Generate PDF
+      const pdfPath = await generatePDF(output);
+      console.log('PDF generated at:', pdfPath);
+      
+      // Get user email from token
+      const token = req.headers.authorization?.split(' ')[1];
+      if (!token) {
+        throw new Error('No authorization token provided');
+      }
+      
+      const decoded = jwt.verify(token, process.env.JWT_SECRET);
+      const userEmail = decoded.email;
+      console.log('User email:', userEmail);
+      
+      // Save to database
+      const query = `
+        INSERT INTO summaries (user_email, video_url, summary, pdf_path)
+        VALUES ($1, $2, $3, $4)
+        RETURNING id
+      `;
+      const values = [userEmail, youtubeUrl, output, pdfPath];
+      const dbResult = await db.query(query, values);
+      console.log('Saved to database, ID:', dbResult.rows[0].id);
+      
+      res.json({ 
+        success: true,
+        method: result.method,
+        summary: output,
+        pdfPath: pdfPath
+      });
+    } catch (innerError) {
+      console.error('Inner error:', innerError);
+      throw innerError;
     }
-
-    // Generate summary or notes based on the output type
-    let output;
-    if (outputType === 'summary') {
-      output = await summarizeText(text);
-    } else if (outputType === 'notes') {
-      output = await generateNotes(text);
-    } else {
-      output = await summarizeText(text);
-    }
-
-    // Generate PDF
-    const pdfPath = await generatePDF(output);
-    
-    // Get user email from token
-    const token = req.headers.authorization?.split(' ')[1];
-    const decoded = jwt.verify(token, process.env.JWT_SECRET);
-    const userEmail = decoded.email;
-    
-    // Save to database
-    const query = `
-      INSERT INTO summaries (user_email, video_url, summary, pdf_path)
-      VALUES ($1, $2, $3, $4)
-      RETURNING id
-    `;
-    const values = [userEmail, youtubeUrl, output, pdfPath];
-    const dbResult = await db.query(query, values);
-    
-    res.json({ 
-      success: true,
-      method: result.method,
-      summary: output,
-      pdfPath: pdfPath
-    });
   } catch (error) {
-    console.error('Error:', error);
+    console.error('Error in process-youtube endpoint:', error);
     res.status(500).json({ error: 'Error processing video: ' + error.message });
   }
 });
