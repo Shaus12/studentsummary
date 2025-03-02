@@ -1,5 +1,4 @@
 import 'dotenv/config';
-import downloadAudio from './DownloadFromYT.js';
 import fs from 'fs/promises';
 import { readFileSync } from 'fs';
 import path from 'path';
@@ -8,9 +7,6 @@ import puppeteer from 'puppeteer';
 import { createClient } from '@deepgram/sdk';
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import { downloadYouTubeAudio } from './DownloadFromYT.js';
-import { transcribeAudio } from './TranscribeAudio.js';
-import { summarizeText } from './SummarizeText.js';
-import { generatePDF } from './GeneratePDF.js';
 
 // Configure Deepgram with increased timeout
 const deepgramApiKey = process.env.DEEPGRAM_API_KEY;
@@ -36,7 +32,8 @@ async function retryWithDelay(fn, retries = 3, delay = 5000) {
   }
 }
 
-export async function transcribeAudio(filePath) {
+// Transcribe audio function
+async function transcribeAudioFile(filePath) {
   try {
     console.log("Starting transcription with Deepgram...");
     
@@ -76,10 +73,10 @@ export async function transcribeAudio(filePath) {
   }
 }
 
-export async function summarizeText(text, summaryOptions = {}) {
+// Summarize text function
+async function summarizeTextContent(text, summaryOptions = {}) {
   try {
     console.log("Starting summarization with Gemini...");
-    console.log("Text to summarize:", text);
     
     const generationConfig = {
       temperature: 1,
@@ -146,7 +143,8 @@ export async function summarizeText(text, summaryOptions = {}) {
   }
 }
 
-export async function createSummaryPDF(summary, outputPath) {
+// Create PDF function
+async function createSummaryPDF(summary, outputPath) {
   try {
     // Convert the summary text into HTML with line breaks and bullet points
     const formattedSummary = summary
@@ -208,13 +206,16 @@ export async function createSummaryPDF(summary, outputPath) {
       margin: { top: '20mm', right: '20mm', bottom: '20mm', left: '20mm' }
     });
     await browser.close();
+    
+    return outputPath;
   } catch (error) {
     console.error('Error creating PDF:', error);
     throw error;
   }
 }
 
-async function processYouTubeVideo(youtubeUrl, { outputType = 'summary', summaryOptions = {} } = {}) {
+// Main function to process YouTube videos
+export async function processYouTube(youtubeUrl, outputType = 'summary') {
   try {
     console.log(`Processing YouTube video: ${youtubeUrl}`);
     console.log('Output Type:', outputType);
@@ -227,27 +228,34 @@ async function processYouTubeVideo(youtubeUrl, { outputType = 'summary', summary
     const tempDir = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'temp');
     await fs.mkdir(tempDir, { recursive: true });
     
-    const audioPath = await downloadAudio(youtubeUrl);
-    console.log("Audio downloaded to:", audioPath);
+    const audioPath = path.join(tempDir, 'audio.mp3');
+    const result = await downloadYouTubeAudio(youtubeUrl, audioPath);
     
-    const transcription = await transcribeAudio(audioPath);
-    console.log("Got transcription:", transcription);
+    let text;
+    if (result.method === 'download') {
+      // If we successfully downloaded the audio, transcribe it
+      console.log('Audio downloaded successfully, transcribing...');
+      text = await transcribeAudioFile(result.outputPath);
+    } else if (result.method === 'transcript') {
+      // If we used the transcript API, use the transcript directly
+      console.log('Using transcript directly...');
+      text = result.transcript;
+    }
     
     // If only transcription is requested, return it without summarizing
     if (outputType === 'transcription') {
       const pdfPath = path.join(tempDir, 'transcription.pdf');
-      await createTranscriptionPDF(transcription, pdfPath);
-      
-      await fs.unlink(audioPath);
+      await createTranscriptionPDF(text, pdfPath);
       
       return {
-        summary: transcription, // Using the same field for consistency
+        method: result.method,
+        summary: text,
         pdfPath: '/files/transcription.pdf'
       };
     }
     
     // If summary is requested, proceed with summarization
-    const summary = await summarizeText(transcription, summaryOptions);
+    const summary = await summarizeTextContent(text);
     console.log("Got summary:", summary);
     
     if (!summary || typeof summary !== 'string' || summary.trim().length === 0) {
@@ -257,9 +265,8 @@ async function processYouTubeVideo(youtubeUrl, { outputType = 'summary', summary
     const pdfPath = path.join(tempDir, 'summary.pdf');
     await createSummaryPDF(summary, pdfPath);
     
-    await fs.unlink(audioPath);
-    
     return {
+      method: result.method,
       summary: summary,
       pdfPath: '/files/summary.pdf'
     };
@@ -269,7 +276,7 @@ async function processYouTubeVideo(youtubeUrl, { outputType = 'summary', summary
   }
 }
 
-// Add a new function to create PDF for transcription
+// Add a function to create PDF for transcription
 async function createTranscriptionPDF(transcription, outputPath) {
   try {
     // Use the same formatting logic as the summary
@@ -341,18 +348,17 @@ async function createTranscriptionPDF(transcription, outputPath) {
                 box-shadow: none;
               }
               .paragraph {
-                break-inside: avoid;
+                box-shadow: none;
               }
             }
           </style>
         </head>
         <body>
+          <h1>תמלול הקלטה</h1>
           <div class="transcription-container">
-            <h1>תמלול הקלטה</h1>
             <div class="transcription">
-              ${formattedTranscription.split('\n\n').map(paragraph => 
-                paragraph.trim() ? `<div class="paragraph">${paragraph}</div>` : ''
-              ).join('')}
+              ${formattedTranscription.split('\n\n').map(para => 
+                `<div class="paragraph">${para}</div>`).join('')}
             </div>
           </div>
         </body>
@@ -361,85 +367,18 @@ async function createTranscriptionPDF(transcription, outputPath) {
 
     const browser = await puppeteer.launch({ headless: true });
     const page = await browser.newPage();
-    await page.setContent(html, { waitUntil: 'networkidle0' });
+    await page.setContent(html, { waitUntil: 'domcontentloaded' });
     await page.pdf({
       path: outputPath,
       format: 'A4',
       printBackground: true,
-      margin: { top: '15mm', right: '15mm', bottom: '15mm', left: '15mm' },
-      displayHeaderFooter: true,
-      headerTemplate: '<div></div>',
-      footerTemplate: `
-        <div style="font-size: 10px; text-align: center; width: 100%;">
-          <span class="pageNumber"></span> מתוך <span class="totalPages"></span>
-        </div>
-      `,
-      footerHeight: '30mm'
+      margin: { top: '20mm', right: '20mm', bottom: '20mm', left: '20mm' }
     });
     await browser.close();
+    
+    return outputPath;
   } catch (error) {
     console.error('Error creating transcription PDF:', error);
     throw error;
   }
 }
-
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
-
-export async function processYouTube(youtubeUrl, outputType) {
-  try {
-    console.log('Processing YouTube video:', youtubeUrl);
-    console.log('Output Type:', outputType);
-
-    // Process the YouTube video with our hybrid approach
-    const result = await downloadYouTubeAudio(youtubeUrl, path.join(__dirname, '..', 'temp', 'audio.mp3'));
-    
-    let text;
-    
-    if (result.method === 'download') {
-      // If we successfully downloaded the audio, transcribe it
-      console.log('Audio downloaded successfully, transcribing...');
-      text = await transcribeAudio(result.outputPath);
-    } else if (result.method === 'transcript') {
-      // If we used the transcript API, use the transcript directly
-      console.log('Using transcript directly...');
-      text = result.transcript;
-    }
-
-    console.log('Text obtained, length:', text?.length);
-
-    // Generate summary or notes based on the output type
-    let output;
-    if (outputType === 'summary') {
-      output = await summarizeText(text);
-    } else if (outputType === 'notes') {
-      // Import generateNotes only if needed
-      try {
-        const notesModule = await import('./GenerateNotes.js');
-        output = await notesModule.generateNotes(text);
-      } catch (error) {
-        console.error('Error importing GenerateNotes.js, falling back to summary:', error);
-        output = await summarizeText(text);
-      }
-    } else {
-      output = await summarizeText(text);
-    }
-
-    console.log('Output generated, length:', output?.length);
-
-    // Generate PDF
-    const pdfPath = await generatePDF(output);
-    console.log('PDF generated at:', pdfPath);
-    
-    return {
-      method: result.method,
-      summary: output,
-      pdfPath: pdfPath
-    };
-  } catch (error) {
-    console.error('Error in processYouTube:', error);
-    throw error;
-  }
-}
-
-export default processYouTubeVideo;
