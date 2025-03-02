@@ -5,6 +5,7 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import { downloadYouTubeAudio } from './DownloadFromYT.js';
 import { getYouTubeTranscript } from './YouTubeTranscript.js';
+import 'dotenv/config';
 
 const execAsync = promisify(exec);
 const __filename = fileURLToPath(import.meta.url);
