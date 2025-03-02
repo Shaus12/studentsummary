@@ -5,23 +5,20 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import { downloadYouTubeAudio } from './DownloadFromYT.js';
 import { getYouTubeTranscript } from './YouTubeTranscript.js';
-import 'dotenv/config';
+import puppeteer from 'puppeteer';
+import { createClient } from '@deepgram/sdk';
+import { GoogleGenerativeAI } from '@google/generative-ai';
 
 const execAsync = promisify(exec);
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-// Import other necessary modules
-import { createClient } from '@deepgram/sdk';
-import { GoogleGenerativeAI } from '@google/generative-ai';
-import puppeteer from 'puppeteer';
-
-// Configure Deepgram
-const deepgramApiKey = process.env.DEEPGRAM_API_KEY;
+// Configure Deepgram with hardcoded key
+const deepgramApiKey = '2a60d94169738ee178d20bb606126fdd56c85710';
 const deepgram = createClient(deepgramApiKey);
 
-// Configure Gemini
-const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
+// Configure Gemini with hardcoded key
+const genAI = new GoogleGenerativeAI('AIzaSyCzIsCmQVuaiUKd0TqaIctPVZ0Bj_3i11A');
 
 // Function to transcribe audio
 async function transcribeAudio(audioPath) {
@@ -129,7 +126,10 @@ async function generatePDF(content) {
     `;
     
     // Generate PDF using puppeteer
-    const browser = await puppeteer.launch({ headless: true });
+    const browser = await puppeteer.launch({ 
+      headless: true,
+      args: ['--no-sandbox', '--disable-setuid-sandbox']
+    });
     const page = await browser.newPage();
     await page.setContent(html, { waitUntil: 'domcontentloaded' });
     await page.pdf({

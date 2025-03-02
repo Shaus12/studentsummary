@@ -11,7 +11,7 @@
   "license": "ISC",
   "description": "",
   "dependencies": {
-    "@deepgram/sdk": "^3.9.0",
+    "@deepgram/sdk": "^3.11.1",
     "@google/generative-ai": "^0.21.0",
     "axios": "^1.8.1",
     "bcryptjs": "^3.0.2",
