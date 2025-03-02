@@ -44,7 +44,11 @@ export async function downloadYouTubeAudio(youtubeUrl, outputPath) {
     
     // First try the original download method
     try {
-      const command = `yt-dlp -x --audio-format mp3 --audio-quality 0 --no-check-certificate --force-ipv4 --geo-bypass --user-agent "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36" -o "${outputPath}" "${youtubeUrl}"`;
+      // Use cookies file if it exists
+      const cookiesPath = path.join(__dirname, '..', 'cookies.txt');
+      const cookiesOption = fs.existsSync(cookiesPath) ? `--cookies ${cookiesPath}` : '';
+      
+      const command = `yt-dlp -x --audio-format mp3 --audio-quality 0 --no-check-certificate --force-ipv4 --geo-bypass ${cookiesOption} --user-agent "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36" -o "${outputPath}" "${youtubeUrl}"`;
       
       console.log('Attempting to download with yt-dlp...');
       const { stdout, stderr } = await execAsync(command);
