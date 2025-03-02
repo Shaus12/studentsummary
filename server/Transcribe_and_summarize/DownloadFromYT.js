@@ -41,7 +41,6 @@ async function downloadAudio(youtubeUrl) {
 export async function downloadYouTubeAudio(youtubeUrl, outputPath) {
   try {
     console.log(`Processing YouTube video: ${youtubeUrl}`);
-    console.log('Running command: yt-dlp -x --audio-format mp3 --audio-quality 0 --no-check-certificate --force-ipv4 --geo-bypass --user-agent "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36" -o "${outputPath}" "${youtubeUrl}"');
     
     // First try the original download method
     try {
