@@ -7,8 +7,7 @@ import jwt from 'jsonwebtoken';
 import { OAuth2Client } from 'google-auth-library';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import processYouTubeVideo from './Transcribe_and_summarize/processYouTube.js';
-import { transcribeAudio, summarizeText, createSummaryPDF } from './Transcribe_and_summarize/processYouTube.js';
+import { processYouTube } from './Transcribe_and_summarize/processYouTube.js';
 import { unlink } from 'fs/promises';
 import multer from 'multer';
 import { existsSync, mkdirSync } from 'fs';
@@ -317,9 +316,6 @@ app.post("/api/process-youtube", async (req, res) => {
     const { youtubeUrl, outputType } = req.body;
     console.log('Processing YouTube video:', youtubeUrl);
     console.log('Output Type:', outputType);
-
-    // Import the processYouTube function
-    const { processYouTube } = await import('./Transcribe_and_summarize/processYouTube.js');
     
     // Process the YouTube video
     const result = await processYouTube(youtubeUrl, outputType);
