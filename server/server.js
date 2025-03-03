@@ -288,10 +288,29 @@ app.post("/api/google-login", async (req, res) => {
 app.post("/api/process-youtube", async (req, res) => {
   try {
     console.log('Processing YouTube video request received');
-    console.log('Request body:', req.body);
+    console.log('Full request:', {
+      headers: req.headers,
+      body: req.body,
+      query: req.query,
+      params: req.params
+    });
     
-    const youtubeUrl = req.body.youtubeUrl;
+    const youtubeUrl = req.body.youtubeUrl || req.query.youtubeUrl;
     console.log('YouTube URL:', youtubeUrl);
+    
+    // Check if the URL might be in a different property
+    if (!youtubeUrl) {
+      console.log('Checking other possible properties in request body...');
+      for (const key in req.body) {
+        console.log(`Property ${key}:`, req.body[key]);
+        if (typeof req.body[key] === 'string' && 
+            (req.body[key].includes('youtube.com') || req.body[key].includes('youtu.be'))) {
+          console.log(`Found YouTube URL in property ${key}`);
+          youtubeUrl = req.body[key];
+          break;
+        }
+      }
+    }
     
     // Validate YouTube URL
     if (!youtubeUrl || typeof youtubeUrl !== 'string') {
