@@ -68,7 +68,11 @@ export async function processYouTube(youtubeUrl, outputType = 'summary', options
     }
     
     // Generate PDF if needed
-    const pdfPath = await generatePDF(summary);
+    let pdfPath = null;
+    if (outputType === 'pdf') {
+      pdfPath = await generatePDF(summary);
+      console.log(`PDF generated at: ${pdfPath}`);
+    }
     
     return {
       summary,

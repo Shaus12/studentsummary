@@ -1,14 +1,10 @@
 import { createClient } from '@deepgram/sdk';
 import fs from "fs/promises";
-import { GoogleGenerativeAI } from '@google/generative-ai';
 import { summarizeText } from './audioProcessing.js';
 
 // Configure Deepgram
 const deepgramApiKey = '26e3b5fc5fd1451123c9c799ede5d211ff94fce9';
 const deepgram = createClient(deepgramApiKey);
-
-// Configure Gemini
-const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 
 // Updated Transcription Function using Deepgram
 async function transcribeAudio(filePath, retries = 3, delay = 5000) {
@@ -35,55 +31,22 @@ async function transcribeAudio(filePath, retries = 3, delay = 5000) {
   }
 }
 
-// Updated Summarization Function using Gemini
-async function summarizeText(text) {
-  try {
-    const generationConfig = {
-      temperature: 1,
-      topP: 0.95,
-      topK: 40,
-      maxOutputTokens: 8192,
-    };
-
-    const model = genAI.getGenerativeModel({
-      model: "gemini-1.5-flash-8b",
-      generationConfig,
-    });
-
-    const chat = model.startChat({
-      history: [],
-    });
-
-    const prompt = `Please summarize the following text in Hebrew, using bullet points:
-    
-    ${text}
-    
-    Please make the summary concise and clear, focusing on the main points.`;
-
-    const result = await chat.sendMessage(prompt);
-    return result.response.text;
-  } catch (error) {
-    console.error("Error summarizing text:", error);
-    throw error;
-  }
-}
-
 // Process transcription in chunks and summarize
 async function processAndSummarize(filePath) {
   try {
     // Step 1: Transcribe the audio
     const transcription = await transcribeAudio(filePath);
 
-    // Step 2: Break transcription into 5-minute chunks (assuming ~1500 words per 5 minutes)
+    // Step 2: Break transcription into 5-minute chunks
     const words = transcription.split(" ");
-    const chunkSize = 1500; // Approximate word count for 5 minutes
+    const chunkSize = 1500;
     const chunks = [];
 
     for (let i = 0; i < words.length; i += chunkSize) {
       chunks.push(words.slice(i, i + chunkSize).join(" "));
     }
 
-    // Step 3: Summarize each chunk using imported summarizeText
+    // Step 3: Summarize each chunk
     const summaries = [];
     for (const [index, chunk] of chunks.entries()) {
       console.log(`Summarizing chunk ${index + 1}/${chunks.length}...`);

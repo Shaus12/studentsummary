@@ -3,7 +3,6 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import { extractVideoId, downloadYouTubeAudio, getYouTubeTranscript } from './YouTubeTranscript.js';
 import { transcribeAudio, summarizeText, generatePDF } from './audioProcessing.js';
-import puppeteer from 'puppeteer';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -34,8 +33,12 @@ export async function processYouTube(youtubeUrl, outputType) {
     const output = await summarizeText(text);
     console.log(`Output generated, length: ${output?.length}`);
     
-    // Generate PDF
-    const pdfPath = await generatePDF(output);
+    // Generate PDF if requested
+    let pdfPath = null;
+    if (outputType === 'pdf') {
+      pdfPath = await generatePDF(output);
+      console.log(`PDF generated at: ${pdfPath}`);
+    }
     
     // Clean up the audio file
     try {
