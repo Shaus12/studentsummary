@@ -45,15 +45,15 @@ export async function downloadYouTubeAudio(youtubeUrl, outputPath) {
     const videoId = extractVideoId(youtubeUrl);
     console.log(`Video ID: ${videoId}`);
     
-    // Use yt-dlp to download audio
-    const cmd = `yt-dlp -x --audio-format mp3 --audio-quality 0 --cookies-from-browser chrome -o "${outputPath}" ${youtubeUrl}`;
+    // Try the alternative approach without browser cookies
+    const cmd = `yt-dlp -x --audio-format mp3 --audio-quality 0 --no-check-certificate --force-ipv4 --geo-bypass -o "${outputPath}" ${youtubeUrl}`;
     console.log('Running command:', cmd);
     
     const { stdout, stderr } = await execAsync(cmd);
-    console.log('Download stdout:', stdout);
     
-    if (stderr) {
-      console.error('Download stderr:', stderr);
+    if (stderr && stderr.includes('ERROR:')) {
+      console.error('Error downloading audio:', stderr);
+      throw new Error(`yt-dlp error: ${stderr}`);
     }
     
     console.log(`Audio downloaded to: ${outputPath}`);
@@ -83,34 +83,52 @@ export async function getYouTubeTranscript(videoId) {
       throw new Error('Invalid video ID');
     }
     
+    // First try with youtube-transcript (doesn't require API key)
+    try {
+      const { YoutubeTranscript } = await import('youtube-transcript');
+      const transcript = await YoutubeTranscript.fetchTranscript(videoId);
+      
+      if (transcript && transcript.length > 0) {
+        // Format the transcript
+        return transcript
+          .map(item => item.text)
+          .join(' ');
+      }
+    } catch (transcriptError) {
+      console.log('Error with youtube-transcript, falling back to other methods:', transcriptError.message);
+    }
+    
+    // If we have a valid API key, try the official API
     const apiKey = process.env.YOUTUBE_API_KEY;
-    if (!apiKey) {
-      console.error('YouTube API key is missing. Please set YOUTUBE_API_KEY in your environment variables.');
-      throw new Error('YouTube API key is missing');
+    if (apiKey && apiKey !== 'undefined') {
+      try {
+        // First get the caption tracks
+        const captionsResponse = await axios.get(
+          `https://www.googleapis.com/youtube/v3/captions?part=snippet&videoId=${videoId}&key=${apiKey}`
+        );
+        
+        if (captionsResponse.data && captionsResponse.data.items && captionsResponse.data.items.length > 0) {
+          // Get the first caption track ID
+          const captionId = captionsResponse.data.items[0].id;
+          
+          // Then get the actual transcript
+          const transcriptResponse = await axios.get(
+            `https://www.googleapis.com/youtube/v3/captions/${captionId}?key=${apiKey}`
+          );
+          
+          if (transcriptResponse.data) {
+            return transcriptResponse.data;
+          }
+        }
+      } catch (apiError) {
+        console.log('Error with YouTube API:', apiError.message);
+      }
     }
     
-    // First, check if captions are available
-    const captionsResponse = await axios.get(
-      `https://www.googleapis.com/youtube/v3/captions?part=snippet&videoId=${videoId}&key=${apiKey}`
-    );
+    // As a last resort, try to extract transcript from the downloaded audio
+    console.log('Falling back to audio transcription...');
+    throw new Error('No transcript available, will use audio transcription');
     
-    if (!captionsResponse.data.items || captionsResponse.data.items.length === 0) {
-      throw new Error('No captions found for this video');
-    }
-    
-    // Get the first available caption track
-    const captionId = captionsResponse.data.items[0].id;
-    
-    // Get the actual transcript
-    const transcriptResponse = await axios.get(
-      `https://www.googleapis.com/youtube/v3/captions/${captionId}?key=${apiKey}`
-    );
-    
-    if (!transcriptResponse.data || !transcriptResponse.data.text) {
-      throw new Error('No transcript data returned');
-    }
-    
-    return transcriptResponse.data.text;
   } catch (error) {
     console.error('Error getting YouTube transcript:', error);
     throw error;
