@@ -608,6 +608,54 @@ app.delete('/api/summary/:id', async (req, res) => {
   }
 });
 
+// Add this route handler to your Express server
+app.get('/api/usage-status', authenticateToken, async (req, res) => {
+  try {
+    const email = req.user.email;
+    
+    // Get the user from the database
+    const user = await db.query(
+      'SELECT membership_type, usage_count FROM users WHERE email = $1',
+      [email]
+    );
+    
+    if (user.rows.length === 0) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+    
+    const userData = user.rows[0];
+    
+    // Define usage limits based on membership level
+    const limits = {
+      free: 5,
+      basic: 20,
+      premium: 100,
+      unlimited: Infinity
+    };
+    
+    // Get the user's membership level (default to 'free' if not set)
+    const membershipLevel = userData.membership_type || 'free';
+    const usageCount = userData.usage_count || 0;
+    const usageLimit = limits[membershipLevel] || limits.free;
+    
+    // Calculate remaining usage
+    const remainingUsage = Math.max(0, usageLimit - usageCount);
+    
+    // Return the usage status
+    res.json({
+      membership: membershipLevel,
+      usageCount: usageCount,
+      usageLimit: usageLimit === Infinity ? 'unlimited' : usageLimit,
+      remainingUsage: usageLimit === Infinity ? 'unlimited' : remainingUsage,
+      canUseService: usageLimit === Infinity || usageCount < usageLimit
+    });
+    
+  } catch (error) {
+    console.error('Error getting usage status:', error);
+    res.status(500).json({ error: 'Failed to get usage status' });
+  }
+});
+
 // Start the server
 app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
