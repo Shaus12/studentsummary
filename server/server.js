@@ -95,7 +95,10 @@ const checkAndUpdateUsage = async (userEmail) => {
       [userEmail]
     );
     
-    if (membershipResult.rows[0].membership_type === 'premium') {
+    // If membership_type is null or doesn't exist, assume 'free'
+    const membershipType = membershipResult.rows[0]?.membership_type || 'free';
+    
+    if (membershipType === 'premium') {
       return { allowed: true };
     }
 
@@ -120,7 +123,8 @@ const checkAndUpdateUsage = async (userEmail) => {
     return { allowed: true };
   } catch (error) {
     console.error('Error checking usage:', error);
-    throw error;
+    // If there's an error, allow the user to proceed
+    return { allowed: true };
   }
 };
 
@@ -665,3 +669,89 @@ const generatePDF = async (summary, title) => {
   await browser.close();
   return pdf;
 };
+
+// Add this function to check and fix the database schema
+async function fixDatabaseSchema() {
+  try {
+    console.log('Checking and fixing database schema...');
+    
+    // Check if the membership_type column exists and has the correct type
+    const checkColumnResult = await db.query(`
+      SELECT column_name, data_type, udt_name
+      FROM information_schema.columns
+      WHERE table_name = 'users' AND column_name = 'membership_type'
+    `);
+    
+    if (checkColumnResult.rows.length === 0) {
+      console.log('membership_type column does not exist, creating it...');
+      
+      // Create the enum type if it doesn't exist
+      await db.query(`
+        DO $$ BEGIN
+          CREATE TYPE membership_status AS ENUM ('free', 'premium');
+        EXCEPTION
+          WHEN duplicate_object THEN null;
+        END $$;
+      `);
+      
+      // Add the column with the correct type
+      await db.query(`
+        ALTER TABLE users 
+        ADD COLUMN membership_type membership_status DEFAULT 'free'
+      `);
+      
+      console.log('membership_type column created successfully');
+    } else {
+      console.log('membership_type column exists, checking its type...');
+      
+      // If the column exists but has the wrong type, we need to fix it
+      const dataType = checkColumnResult.rows[0].udt_name;
+      if (dataType !== 'membership_status') {
+        console.log(`membership_type column has incorrect type: ${dataType}, fixing...`);
+        
+        // Create a temporary column with the correct type
+        await db.query(`
+          ALTER TABLE users 
+          ADD COLUMN membership_type_new membership_status DEFAULT 'free'
+        `);
+        
+        // Copy data from old column to new column
+        await db.query(`
+          UPDATE users 
+          SET membership_type_new = 
+            CASE 
+              WHEN membership_type = 'premium' THEN 'premium'::membership_status 
+              ELSE 'free'::membership_status 
+            END
+        `);
+        
+        // Drop the old column
+        await db.query(`
+          ALTER TABLE users 
+          DROP COLUMN membership_type
+        `);
+        
+        // Rename the new column to the original name
+        await db.query(`
+          ALTER TABLE users 
+          RENAME COLUMN membership_type_new TO membership_type
+        `);
+        
+        console.log('membership_type column fixed successfully');
+      } else {
+        console.log('membership_type column has the correct type');
+      }
+    }
+    
+    console.log('Database schema check completed');
+  } catch (error) {
+    console.error('Error fixing database schema:', error);
+  }
+}
+
+// Call this function when the server starts
+fixDatabaseSchema().then(() => {
+  console.log('Database schema check completed');
+}).catch(error => {
+  console.error('Error checking database schema:', error);
+});
