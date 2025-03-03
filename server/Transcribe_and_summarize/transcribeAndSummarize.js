@@ -101,7 +101,8 @@ async function processAndSummarize(filePath) {
   }
 }
 
-// Call the process function
-processAndSummarize(filePath).catch((err) => console.error(err));
+// Import the functions from audioProcessing.js instead of defining them here
+import { summarizeText, generatePDF } from './audioProcessing.js';
 
-export { transcribeAudio, summarizeText, processAndSummarize };
+// Export only what's needed
+export { summarizeText, generatePDF, processAndSummarize };
