@@ -8,9 +8,9 @@ import { getYouTubeTranscript } from './YouTubeTranscript.js';
 import puppeteer from 'puppeteer';
 import { createClient } from '@deepgram/sdk';
 import { GoogleGenerativeAI } from '@google/generative-ai';
-import { summarizeText } from './Summarize.js';
+import { summarizeText } from './audioProcessing.js';
 import { generatePDF } from './GeneratePDF.js';
-import { extractVideoId } from '../utils/youtubeUtils.js';
+import { extractVideoId } from './YouTubeTranscript.js';
 import fetch from 'node-fetch';
 import { dirname } from 'path';
 import { transcribeAudio } from './transcribeAndSummarize.js';
@@ -25,34 +25,6 @@ const deepgram = createClient(deepgramApiKey);
 
 // Configure Gemini with hardcoded key
 const genAI = new GoogleGenerativeAI('AIzaSyCzIsCmQVuaiUKd0TqaIctPVZ0Bj_3i11A');
-
-// Function to summarize text
-async function summarizeText(text) {
-  try {
-    console.log(`Summarizing text of length: ${text.length}`);
-    
-    // Use Gemini to summarize
-    const model = genAI.getGenerativeModel({ model: "gemini-pro" });
-    
-    const prompt = `
-    Please summarize the following Hebrew text in Hebrew. 
-    Create a comprehensive summary that captures the main points and key details.
-    
-    Text to summarize:
-    ${text}
-    `;
-    
-    const result = await model.generateContent(prompt);
-    const summary = result.response.text();
-    
-    console.log(`Summary generated: ${summary.substring(0, 100)}...`);
-    
-    return summary;
-  } catch (error) {
-    console.error('Error summarizing text:', error);
-    throw error;
-  }
-}
 
 // Function to generate PDF
 async function generatePDF(content) {
@@ -195,7 +167,7 @@ export async function processYouTube(youtubeUrl, outputType = 'summary', options
 // Helper function to get video info
 async function getVideoInfo(videoId) {
   try {
-    const apiKey = 'AIzaSyAZ78Gva-kSMxsY0MQ6r2QREuDjvWmgjIA';
+    const apiKey = process.env.YOUTUBE_API_KEY;
     
     console.log(`Fetching video info for video ID: ${videoId}`);
     const response = await fetch(`https://www.googleapis.com/youtube/v3/videos?part=snippet,contentDetails,statistics&id=${videoId}&key=${apiKey}`);
@@ -221,20 +193,6 @@ async function getVideoInfo(videoId) {
 }
 
 // Helper functions
-function extractVideoId(url) {
-  if (!url) return null;
-  
-  // Regular expression to extract video ID from various YouTube URL formats
-  const regExp = /^.*(youtu.be\/|v\/|e\/|u\/\w+\/|embed\/|v=)([^#\&\?]*).*/;
-  const match = url.match(regExp);
-  
-  if (match && match[2].length === 11) {
-    return match[2];
-  }
-  
-  return null;
-}
-
 async function downloadAudio(youtubeUrl) {
   try {
     console.log(`Downloading audio from ${youtubeUrl}...`);
