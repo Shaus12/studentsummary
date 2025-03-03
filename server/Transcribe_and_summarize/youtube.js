@@ -54,7 +54,8 @@ const downloadYouTubeAudioWithPuppeteer = async (videoId) => {
         '--no-sandbox',
         '--disable-setuid-sandbox',
         '--disable-web-security',
-        '--disable-features=IsolateOrigins,site-per-process'
+        '--disable-features=IsolateOrigins,site-per-process',
+        '--disable-blink-features=AutomationControlled' // Prevents detection
       ]
     });
     
@@ -71,23 +72,94 @@ const downloadYouTubeAudioWithPuppeteer = async (videoId) => {
         'Accept-Encoding': 'gzip, deflate, br'
       });
       
+      // Override navigator.webdriver property to prevent detection
+      await page.evaluateOnNewDocument(() => {
+        Object.defineProperty(navigator, 'webdriver', {
+          get: () => false,
+        });
+        
+        // Add missing properties that headless browsers don't have
+        window.navigator.chrome = {
+          runtime: {},
+        };
+        
+        // Overwrite the plugins property to use a custom getter
+        Object.defineProperty(navigator, 'plugins', {
+          get: () => [
+            {
+              0: {
+                type: 'application/x-google-chrome-pdf',
+                suffixes: 'pdf',
+                description: 'Portable Document Format',
+                enabledPlugin: Plugin,
+              },
+              description: 'Chrome PDF Plugin',
+              filename: 'internal-pdf-viewer',
+              length: 1,
+              name: 'Chrome PDF Plugin',
+            },
+          ],
+        });
+        
+        // Overwrite the languages property
+        Object.defineProperty(navigator, 'languages', {
+          get: () => ['en-US', 'en'],
+        });
+      });
+      
       // Navigate to the video page
       console.log(`Navigating to ${videoUrl}`);
       await page.goto(videoUrl, { waitUntil: 'networkidle2', timeout: 60000 });
       
-      // Wait for the video player to load
-      await page.waitForSelector('video', { timeout: 30000 });
-      
-      // Get the audio URL from the video element
-      const audioUrl = await page.evaluate(() => {
-        const videoElement = document.querySelector('video');
-        return videoElement ? videoElement.src : null;
+      // Check if we're on a captcha page
+      const isCaptcha = await page.evaluate(() => {
+        return document.title.includes('confirm') || document.body.innerText.includes('not a robot');
       });
       
-      if (!audioUrl) {
-        throw new Error('Could not extract audio URL from the video page');
+      if (isCaptcha) {
+        console.log('Captcha detected, cannot proceed');
+        throw new Error('YouTube is showing a captcha. Please try again later or use a different video.');
       }
       
+      // Wait longer for the video player to load
+      console.log('Waiting for video player to load...');
+      await page.waitForSelector('video', { timeout: 45000 }).catch(() => {
+        console.log('Video element not found, trying alternative approach');
+      });
+      
+      // Try to extract the audio URL using network requests
+      console.log('Monitoring network requests for audio URLs...');
+      
+      // Create a promise that resolves when we find an audio URL
+      const audioUrlPromise = new Promise((resolve, reject) => {
+        let audioUrl = null;
+        
+        // Listen for network requests that contain audio
+        page.on('response', async (response) => {
+          const url = response.url();
+          if (url.includes('googlevideo.com') && 
+              (url.includes('audio') || url.includes('mp4a'))) {
+            audioUrl = url;
+            resolve(url);
+          }
+        });
+        
+        // Set a timeout
+        setTimeout(() => {
+          if (!audioUrl) {
+            reject(new Error('Could not find audio URL in network requests'));
+          }
+        }, 30000);
+      });
+      
+      // Click the play button to start the video
+      await page.evaluate(() => {
+        const playButton = document.querySelector('.ytp-play-button');
+        if (playButton) playButton.click();
+      });
+      
+      // Wait for the audio URL
+      const audioUrl = await audioUrlPromise;
       console.log(`Extracted audio URL: ${audioUrl}`);
       
       // Download the audio file
