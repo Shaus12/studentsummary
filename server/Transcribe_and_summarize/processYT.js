@@ -6,18 +6,17 @@ import { fileURLToPath } from 'url';
 import puppeteer from 'puppeteer';
 import { createClient } from '@deepgram/sdk';
 import { GoogleGenerativeAI } from '@google/generative-ai';
-import { transcribeAudio, summarizeText } from './transcribeAndSummarize.js';
 
 const execAsync = promisify(exec);
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 // Configure Deepgram
-const deepgramApiKey = process.env.DEEPGRAM_API_KEY || 'AIzaSyCzIsCmQVuaiUKd0TqaIctPVZ0Bj_3i11A';
+const deepgramApiKey = process.env.DEEPGRAM_API_KEY || 'YOUR_DEEPGRAM_API_KEY';
 const deepgram = createClient(deepgramApiKey);
 
 // Configure Gemini
-const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || '2a60d94169738ee178d20bb606126fdd56c85710');
+const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || 'YOUR_GEMINI_API_KEY');
 
 // Function to extract video ID from YouTube URL
 function extractVideoId(url) {
@@ -67,76 +66,58 @@ async function downloadYouTubeAudio(youtubeUrl, outputPath) {
   }
 }
 
-// Function to generate PDF
-async function generatePDF(content) {
+// Function to transcribe audio
+async function transcribeAudio(audioPath) {
   try {
-    console.log('Generating PDF...');
+    console.log(`Transcribing audio file: ${audioPath}`);
     
-    const outputPath = path.join(__dirname, '..', 'temp', `summary_${Date.now()}.pdf`);
+    // Read the audio file
+    const audioFile = fs.readFileSync(audioPath);
     
-    // Format the content for PDF
-    const formattedContent = content.replace(/\n/g, '<br>');
+    // Transcribe with Deepgram
+    const { result } = await deepgram.listen.prerecorded.transcribeFile(
+      audioFile,
+      {
+        model: 'whisper',
+        language: 'he',
+        smart_format: true,
+      }
+    );
     
-    // Create HTML template
-    const html = `
-    <!DOCTYPE html>
-    <html lang="he" dir="rtl">
-      <head>
-        <meta charset="UTF-8">
-        <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <title>Summary</title>
-        <style>
-          body {
-            font-family: Arial, sans-serif;
-            line-height: 1.6;
-            direction: rtl;
-            text-align: right;
-            padding: 20px;
-          }
-          h1 {
-            text-align: center;
-            margin-bottom: 20px;
-          }
-          .content {
-            max-width: 800px;
-            margin: 0 auto;
-            background-color: #ffffff;
-            padding: 20px;
-            border-radius: 8px;
-            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
-          }
-        </style>
-      </head>
-      <body>
-        <h1>סיכום</h1>
-        <div class="content">
-          ${formattedContent}
-        </div>
-      </body>
-    </html>
+    const transcript = result.results.channels[0].alternatives[0].transcript;
+    console.log(`Transcription complete: ${transcript.substring(0, 100)}...`);
+    
+    return transcript;
+  } catch (error) {
+    console.error('Error transcribing audio:', error);
+    throw error;
+  }
+}
+
+// Function to summarize text
+async function summarizeText(text) {
+  try {
+    console.log(`Summarizing text of length: ${text.length}`);
+    
+    // Use Gemini to summarize
+    const model = genAI.getGenerativeModel({ model: "gemini-pro" });
+    
+    const prompt = `
+    Please summarize the following Hebrew text in Hebrew. 
+    Create a comprehensive summary that captures the main points and key details.
+    
+    Text to summarize:
+    ${text}
     `;
     
-    // Generate PDF using puppeteer
-    const browser = await puppeteer.launch({ 
-      headless: true,
-      args: ['--no-sandbox', '--disable-setuid-sandbox']
-    });
-    const page = await browser.newPage();
-    await page.setContent(html, { waitUntil: 'domcontentloaded' });
-    await page.pdf({
-      path: outputPath,
-      format: 'A4',
-      printBackground: true,
-      margin: { top: '20mm', right: '20mm', bottom: '20mm', left: '20mm' }
-    });
-    await browser.close();
+    const result = await model.generateContent(prompt);
+    const summary = result.response.text();
     
-    console.log(`PDF generated at: ${outputPath}`);
+    console.log(`Summary generated: ${summary.substring(0, 100)}...`);
     
-    // Return the relative path for storage in the database
-    return `/files/${path.basename(outputPath)}`;
+    return summary;
   } catch (error) {
-    console.error('Error generating PDF:', error);
+    console.error('Error summarizing text:', error);
     throw error;
   }
 }
@@ -189,4 +170,4 @@ export async function processYouTube(youtubeUrl, outputType) {
     console.error('Error in processYouTube:', error);
     throw error;
   }
-} 
+}
