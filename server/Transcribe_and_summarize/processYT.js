@@ -11,28 +11,39 @@ const execAsync = promisify(exec);
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-// Configure Deepgram with hardcoded key
-const deepgramApiKey = '2a60d94169738ee178d20bb606126fdd56c85710';
+// Configure Deepgram
+const deepgramApiKey = process.env.DEEPGRAM_API_KEY || '2a60d94169738ee178d20bb606126fdd56c85710';
 const deepgram = createClient(deepgramApiKey);
 
-// Configure Gemini with hardcoded key
-const genAI = new GoogleGenerativeAI('AIzaSyCzIsCmQVuaiUKd0TqaIctPVZ0Bj_3i11A');
+// Configure Gemini
+const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || 'AIzaSyCzIsCmQVuaiUKd0TqaIctPVZ0Bj_3i11A');
+
+// Function to extract video ID from YouTube URL
+function extractVideoId(url) {
+  if (!url || typeof url !== 'string') {
+    throw new Error('Invalid YouTube URL');
+  }
+  
+  const regex = /(?:youtube\.com\/(?:[^\/]+\/.+\/|(?:v|e(?:mbed)?)\/|.*[?&]v=)|youtu\.be\/)([^"&?\/\s]{11})/;
+  const match = url.match(regex);
+  
+  if (!match || !match[1]) {
+    throw new Error('Could not extract video ID from URL');
+  }
+  
+  return match[1];
+}
 
 // Function to download YouTube audio
 async function downloadYouTubeAudio(youtubeUrl, outputPath) {
   try {
     console.log(`Downloading audio from: ${youtubeUrl}`);
     
-    // Extract video ID from URL
-    const videoIdMatch = youtubeUrl.match(/(?:youtube\.com\/(?:[^\/]+\/.+\/|(?:v|e(?:mbed)?)\/|.*[?&]v=)|youtu\.be\/)([^"&?\/\s]{11})/);
-    if (!videoIdMatch) {
-      throw new Error('Invalid YouTube URL');
-    }
-    
-    const videoId = videoIdMatch[1];
+    // Extract video ID
+    const videoId = extractVideoId(youtubeUrl);
     console.log(`Video ID: ${videoId}`);
     
-    // Use youtube-dl to download audio
+    // Use yt-dlp to download audio
     const command = `yt-dlp -x --audio-format mp3 --audio-quality 0 -o "${outputPath}" ${youtubeUrl}`;
     console.log(`Executing command: ${command}`);
     
@@ -192,7 +203,7 @@ export async function processYouTube(youtubeUrl, outputType) {
     console.log(`Output type: ${outputType}`);
     
     // Process the YouTube video
-    const audioPath = path.join(__dirname, '..', 'temp', 'audio.mp3');
+    const audioPath = path.join(__dirname, '..', 'temp', `audio_${Date.now()}.mp3`);
     const result = await downloadYouTubeAudio(youtubeUrl, audioPath);
     
     // Transcribe the audio
@@ -215,6 +226,14 @@ export async function processYouTube(youtubeUrl, outputType) {
     
     // Generate PDF
     const pdfPath = await generatePDF(output);
+    
+    // Clean up the audio file
+    try {
+      await fs.promises.unlink(result.outputPath);
+      console.log(`Cleaned up audio file: ${result.outputPath}`);
+    } catch (cleanupError) {
+      console.error('Error cleaning up audio file:', cleanupError);
+    }
     
     return {
       method: 'download',

@@ -7,7 +7,7 @@ import jwt from 'jsonwebtoken';
 import { OAuth2Client } from 'google-auth-library';
 import path from 'path';
 import { fileURLToPath } from 'url';
-// import { processYouTube } from './Transcribe_and_summarize/processYT.js';
+import { processYouTube } from './Transcribe_and_summarize/processYT.js';
 import { unlink } from 'fs/promises';
 import multer from 'multer';
 import { existsSync, mkdirSync } from 'fs';
@@ -317,6 +317,11 @@ app.post("/api/process-youtube", async (req, res) => {
     console.log('Processing YouTube video:', youtubeUrl);
     console.log('Output Type:', outputType);
     
+    // Validate YouTube URL
+    if (!youtubeUrl || typeof youtubeUrl !== 'string') {
+      return res.status(400).json({ error: 'Invalid YouTube URL' });
+    }
+    
     // Get user email from token
     const token = req.headers.authorization?.split(' ')[1];
     if (!token) {
@@ -332,9 +337,8 @@ app.post("/api/process-youtube", async (req, res) => {
       return res.status(403).json({ message: usageCheck.message });
     }
     
-    // Temporary response
-    const summary = "This is a temporary response while we fix the server. Your YouTube video will be processed soon.";
-    const pdfPath = null;
+    // Process the YouTube video
+    const result = await processYouTube(youtubeUrl, outputType);
     
     // Save to database
     const query = `
@@ -342,14 +346,14 @@ app.post("/api/process-youtube", async (req, res) => {
       VALUES ($1, $2, $3, $4)
       RETURNING id
     `;
-    const values = [userEmail, youtubeUrl, summary, pdfPath];
+    const values = [userEmail, youtubeUrl, result.summary, result.pdfPath];
     const dbResult = await db.query(query, values);
     
     res.json({ 
       success: true,
-      method: "temporary",
-      summary: summary,
-      pdfPath: pdfPath
+      method: result.method,
+      summary: result.summary,
+      pdfPath: result.pdfPath
     });
   } catch (error) {
     console.error('Error:', error);
