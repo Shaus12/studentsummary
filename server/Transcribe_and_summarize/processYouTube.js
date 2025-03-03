@@ -151,10 +151,11 @@ async function generatePDF(content) {
 }
 
 // Main function to process YouTube videos
-export async function processYouTube(youtubeUrl, outputType = 'summary') {
+export async function processYouTube(youtubeUrl, outputType = 'summary', options = {}) {
   try {
     console.log(`Processing YouTube URL: ${youtubeUrl}`);
     console.log(`Output type: ${outputType}`);
+    console.log(`Options:`, options);
     
     // Extract video ID
     const videoId = extractVideoId(youtubeUrl);
@@ -165,8 +166,8 @@ export async function processYouTube(youtubeUrl, outputType = 'summary') {
     // Get video info from YouTube API
     const videoInfo = await getVideoInfo(videoId);
     
-    // Generate a summary based on the video info
-    const summary = generateSummaryFromVideoInfo(videoInfo, outputType);
+    // Generate a summary based on the video info and options
+    const summary = generateSummaryFromVideoInfo(videoInfo, outputType, options);
     
     return {
       summary,
@@ -177,8 +178,16 @@ export async function processYouTube(youtubeUrl, outputType = 'summary') {
     console.error('Error in processYouTube:', error);
     
     // Return a fallback summary in case of any error
+    const language = options?.language || 'en';
+    
+    // Multilingual error messages
+    const errorMessages = {
+      en: `Unable to process this YouTube video due to an error: ${error.message}. Please try another video.`,
+      he: `לא ניתן לעבד את סרטון היוטיוב הזה בגלל שגיאה: ${error.message}. אנא נסה סרטון אחר.`
+    };
+    
     return {
-      summary: `Unable to process this YouTube video due to an error: ${error.message}. Please try another video.`,
+      summary: errorMessages[language] || errorMessages.en,
       pdfPath: null,
       method: 'error'
     };
@@ -228,9 +237,13 @@ async function getVideoInfo(videoId) {
   }
 }
 
-function generateSummaryFromVideoInfo(videoInfo, outputType) {
+function generateSummaryFromVideoInfo(videoInfo, outputType, options = {}) {
   try {
     console.log('Generating summary from video info');
+    
+    // Get language preference
+    const language = options.language || 'en';
+    console.log(`Using language: ${language}`);
     
     // Extract relevant information
     const snippet = videoInfo.snippet || {};
@@ -261,17 +274,60 @@ function generateSummaryFromVideoInfo(videoInfo, outputType) {
       duration = duration.trim();
     }
     
+    // Multilingual labels
+    const labels = {
+      en: {
+        channel: 'Channel',
+        published: 'Published',
+        duration: 'Duration',
+        views: 'Views',
+        likes: 'Likes',
+        comments: 'Comments',
+        summary: 'Summary',
+        note: 'Note',
+        noDescription: 'No description available for this video.',
+        generatedNote: 'This summary was generated based on the video\'s metadata. For a more detailed understanding, please watch the full video on YouTube.',
+        keyPoints: 'Key Points',
+        additionalContent: '... (additional content in the description)',
+        noKeyPoints: 'No key points could be extracted from the video description',
+        watchVideo: 'For detailed information, please watch the video',
+        videoStats: 'Video Statistics',
+        automatedSummary: 'This is an automated summary based on the video metadata. For complete information, please watch the full video.'
+      },
+      he: {
+        channel: 'ערוץ',
+        published: 'פורסם',
+        duration: 'משך',
+        views: 'צפיות',
+        likes: 'לייקים',
+        comments: 'תגובות',
+        summary: 'סיכום',
+        note: 'הערה',
+        noDescription: 'אין תיאור זמין לסרטון זה.',
+        generatedNote: 'סיכום זה נוצר על בסיס המטא-דאטה של הסרטון. להבנה מפורטת יותר, אנא צפה בסרטון המלא ביוטיוב.',
+        keyPoints: 'נקודות מפתח',
+        additionalContent: '... (תוכן נוסף בתיאור)',
+        noKeyPoints: 'לא ניתן לחלץ נקודות מפתח מתיאור הסרטון',
+        watchVideo: 'למידע מפורט, אנא צפה בסרטון',
+        videoStats: 'נתוני הסרטון',
+        automatedSummary: 'זהו סיכום אוטומטי המבוסס על המטא-דאטה של הסרטון. למידע מלא, אנא צפה בסרטון המלא.'
+      }
+    };
+    
+    // Use English as fallback if requested language is not supported
+    const l = labels[language] || labels.en;
+    
     // Generate summary based on output type
     let summary = '';
     
     if (outputType === 'summary') {
       summary = `# ${title}\n\n`;
-      summary += `**Channel:** ${channelTitle}\n`;
-      summary += `**Published:** ${publishedAt}\n`;
-      summary += `**Duration:** ${duration}\n`;
-      summary += `**Views:** ${viewCount} | **Likes:** ${likeCount} | **Comments:** ${commentCount}\n\n`;
+      summary += `**${l.channel}:** ${channelTitle}\n`;
+      summary += `**${l.published}:** ${publishedAt}\n`;
+      summary += `**${l.duration}:** ${duration}\n`;
+      summary += `**${l.views}:** ${viewCount} | **${l.likes}:** ${likeCount} | **${l.comments}:** ${commentCount}\n\n`;
       
-      summary += `## Summary\n\n`;
+      summary += `## ${l.summary}\n\n`;
       
       if (description.length > 0) {
         // Clean up and format the description
@@ -281,17 +337,17 @@ function generateSummaryFromVideoInfo(videoInfo, outputType) {
         
         summary += `${cleanDescription}\n\n`;
       } else {
-        summary += `No description available for this video.\n\n`;
+        summary += `${l.noDescription}\n\n`;
       }
       
-      summary += `## Note\n\n`;
-      summary += `This summary was generated based on the video's metadata. For a more detailed understanding, please watch the full video on YouTube.`;
+      summary += `## ${l.note}\n\n`;
+      summary += `${l.generatedNote}`;
     } else if (outputType === 'notes') {
-      summary = `# Notes: ${title}\n\n`;
-      summary += `**Channel:** ${channelTitle}\n`;
-      summary += `**Published:** ${publishedAt}\n\n`;
+      summary = `# ${title}\n\n`;
+      summary += `**${l.channel}:** ${channelTitle}\n`;
+      summary += `**${l.published}:** ${publishedAt}\n\n`;
       
-      summary += `## Key Points\n\n`;
+      summary += `## ${l.keyPoints}\n\n`;
       
       // Extract potential key points from description
       const lines = description.split('\n').filter(line => line.trim().length > 0);
@@ -302,20 +358,20 @@ function generateSummaryFromVideoInfo(videoInfo, outputType) {
         }
         
         if (lines.length > 10) {
-          summary += `- ... (additional content in the description)\n`;
+          summary += `- ${l.additionalContent}\n`;
         }
       } else {
-        summary += `- No key points could be extracted from the video description\n`;
-        summary += `- For detailed information, please watch the video\n`;
+        summary += `- ${l.noKeyPoints}\n`;
+        summary += `- ${l.watchVideo}\n`;
       }
       
-      summary += `\n## Video Statistics\n\n`;
-      summary += `- Duration: ${duration}\n`;
-      summary += `- Views: ${viewCount}\n`;
-      summary += `- Likes: ${likeCount}\n`;
-      summary += `- Comments: ${commentCount}\n\n`;
+      summary += `\n## ${l.videoStats}\n\n`;
+      summary += `- ${l.duration}: ${duration}\n`;
+      summary += `- ${l.views}: ${viewCount}\n`;
+      summary += `- ${l.likes}: ${likeCount}\n`;
+      summary += `- ${l.comments}: ${commentCount}\n\n`;
       
-      summary += `This is an automated summary based on the video metadata. For complete information, please watch the full video.`;
+      summary += `${l.automatedSummary}`;
     }
     
     console.log('Summary generated successfully');

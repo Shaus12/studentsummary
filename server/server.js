@@ -326,23 +326,25 @@ app.post("/api/process-youtube", async (req, res) => {
       return res.status(401).json({ error: 'No authorization token provided' });
     }
     
-    const decoded = jwt.verify(token, process.env.JWT_SECRET);
-    const userEmail = decoded.email;
-    
-    // Check usage limits (simplified)
-    const usageCheck = await checkAndUpdateUsage(userEmail);
-    if (!usageCheck.allowed) {
-      return res.status(403).json({ message: usageCheck.message });
+    let userEmail;
+    try {
+      const decoded = jwt.verify(token, process.env.JWT_SECRET);
+      userEmail = decoded.email;
+    } catch (error) {
+      console.error('Invalid token:', error);
+      return res.status(401).json({ error: 'Invalid token' });
     }
     
-    // Get output type from request or use default
+    // Get output type from request
     const outputType = req.body.outputType || 'summary';
     
-    // For now, return a temporary response
-    const summary = `This is a temporary summary for the YouTube video: ${youtubeUrl}. We are working on improving our processing capabilities.`;
+    // Get summary options from request
+    const summaryOptions = req.body.summaryOptions || {};
+    
+    // Generate a temporary summary
+    const summary = `Processing YouTube video: ${youtubeUrl}. Please wait...`;
     const pdfPath = null;
     
-    // Save to database
     console.log('Saving to database...');
     const query = `
       INSERT INTO summaries (user_email, video_url, summary, pdf_path)
@@ -363,7 +365,7 @@ app.post("/api/process-youtube", async (req, res) => {
     // Process the YouTube video in the background (don't wait for it)
     try {
       console.log('Starting background processing of YouTube video...');
-      processYouTube(youtubeUrl, outputType)
+      processYouTube(youtubeUrl, outputType, summaryOptions)
         .then(result => {
           console.log('YouTube processing completed successfully');
           // Update the database with the actual summary and PDF path
