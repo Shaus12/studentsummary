@@ -169,99 +169,51 @@ export async function processYouTube(youtubeUrl, outputType = 'summary', options
       throw new Error('Invalid YouTube URL');
     }
     
-    let content = null;
-    let method = 'api';
+    // Get video info using YouTube API
+    const videoInfo = await getVideoInfo(videoId);
     
-    // Try to get content from YouTube
-    try {
-      console.log("Attempting to get content from YouTube...");
-      const result = await downloadYouTubeAudio(youtubeUrl);
-      
-      if (result.transcript) {
-        // If we got a transcript directly
-        content = result.transcript;
-        method = 'transcript';
-        console.log("Using transcript from YouTube");
-      } else if (result.audioPath) {
-        // If we got an audio file, transcribe it
-        console.log("Transcribing downloaded audio...");
-        content = await transcribeAudio(result.audioPath);
-        method = 'transcription';
-        console.log("Using transcribed audio");
-        
-        // Clean up the audio file
-        fs.unlinkSync(result.audioPath);
-      }
-    } catch (contentError) {
-      console.error("Error getting content from YouTube:", contentError);
-      // Continue to fallback method
+    // Extract relevant information
+    const title = videoInfo.snippet.title || 'Untitled Video';
+    const description = videoInfo.snippet.description || 'No description available';
+    const channelTitle = videoInfo.snippet.channelTitle || 'Unknown Channel';
+    const publishedAt = videoInfo.snippet.publishedAt 
+      ? new Date(videoInfo.snippet.publishedAt).toLocaleDateString() 
+      : 'Unknown date';
+    
+    // Format the summary based on language
+    const language = options.language || 'en';
+    
+    let summary;
+    if (language === 'he') {
+      summary = `# ${title}\n\n`;
+      summary += `ערוץ: ${channelTitle}\n`;
+      summary += `פורסם: ${publishedAt}\n\n`;
+      summary += `## תיאור\n\n`;
+      summary += description;
+    } else {
+      summary = `# ${title}\n\n`;
+      summary += `Channel: ${channelTitle}\n`;
+      summary += `Published: ${publishedAt}\n\n`;
+      summary += `## Description\n\n`;
+      summary += description;
     }
     
-    // If we couldn't get content, fall back to video info
-    if (!content) {
-      try {
-        console.log("Falling back to video metadata...");
-        const videoInfo = await getVideoInfo(videoId);
-        
-        // Get title and description
-        const title = videoInfo.snippet.title;
-        const description = videoInfo.snippet.description;
-        const channelTitle = videoInfo.snippet.channelTitle;
-        const publishedAt = new Date(videoInfo.snippet.publishedAt).toLocaleDateString();
-        
-        // Format metadata for display
-        const language = options.language || 'en';
-        
-        // Simple summary based on video metadata
-        let summary = `# ${title}\n\n`;
-        summary += `Channel: ${channelTitle}\n`;
-        summary += `Published: ${publishedAt}\n\n`;
-        summary += `## Description\n\n`;
-        summary += description;
-        
-        return {
-          summary,
-          pdfPath: null,
-          method: 'metadata'
-        };
-      } catch (videoInfoError) {
-        console.error("Error getting video info:", videoInfoError);
-        throw new Error("Failed to get any content from the YouTube video");
-      }
-    }
-    
-    // If we have content, summarize it
-    if (content) {
-      console.log("Summarizing content...");
-      const summary = await summarizeText(content, options);
-      
-      return {
-        summary,
-        pdfPath: null,
-        method
-      };
-    }
-    
-    // If we somehow got here without content or an error, return a generic message
     return {
-      summary: "Unable to process this YouTube video. Please try another video.",
+      summary,
       pdfPath: null,
-      method: 'error'
+      method: 'api'
     };
   } catch (error) {
     console.error('Error in processYouTube:', error);
     
     // Return a fallback summary in case of any error
     const language = options?.language || 'en';
-    
-    // Multilingual error messages
-    const errorMessages = {
-      en: `Unable to process this YouTube video due to an error: ${error.message}. Please try another video.`,
-      he: `לא ניתן לעבד את סרטון היוטיוב הזה בגלל שגיאה: ${error.message}. אנא נסה סרטון אחר.`
-    };
+    const errorMessage = language === 'he'
+      ? `לא ניתן לעבד את סרטון היוטיוב הזה בגלל שגיאה: ${error.message}. אנא נסה סרטון אחר.`
+      : `Unable to process this YouTube video due to an error: ${error.message}. Please try another video.`;
     
     return {
-      summary: errorMessages[language] || errorMessages.en,
+      summary: errorMessage,
       pdfPath: null,
       method: 'error'
     };
