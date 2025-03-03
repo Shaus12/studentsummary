@@ -162,29 +162,17 @@ export async function processYouTube(youtubeUrl, outputType = 'summary') {
       throw new Error('Invalid YouTube URL');
     }
     
-    // Generate a summary based on the video title and description
-    try {
-      // Get video info from YouTube
-      const videoInfo = await getVideoInfo(videoId);
-      
-      // Generate a summary based on the video info
-      const summary = generateSummaryFromVideoInfo(videoInfo, outputType);
-      
-      return {
-        summary,
-        pdfPath: null,
-        method: 'video_info'
-      };
-    } catch (error) {
-      console.error('Error generating summary from video info:', error);
-      
-      // Fallback to a generic summary
-      return {
-        summary: `This is a summary for the YouTube video: ${youtubeUrl}. We were unable to process the video content, but you can watch the video directly on YouTube.`,
-        pdfPath: null,
-        method: 'fallback'
-      };
-    }
+    // Get video info from YouTube API
+    const videoInfo = await getVideoInfo(videoId);
+    
+    // Generate a summary based on the video info
+    const summary = generateSummaryFromVideoInfo(videoInfo, outputType);
+    
+    return {
+      summary,
+      pdfPath: null,
+      method: 'api'
+    };
   } catch (error) {
     console.error('Error in processYouTube:', error);
     
@@ -197,7 +185,7 @@ export async function processYouTube(youtubeUrl, outputType = 'summary') {
   }
 }
 
-// Add these helper functions
+// Helper functions
 function extractVideoId(url) {
   if (!url) return null;
   
@@ -214,51 +202,128 @@ function extractVideoId(url) {
 
 async function getVideoInfo(videoId) {
   try {
-    // Use the YouTube Data API to get video info
-    const apiKey = process.env.YOUTUBE_API_KEY || 'YOUR_API_KEY'; // Replace with your actual API key
-    const response = await fetch(`https://www.googleapis.com/youtube/v3/videos?part=snippet&id=${videoId}&key=${apiKey}`);
+    // Use the provided YouTube Data API key
+    const apiKey = 'AIzaSyAZ78Gva-kSMxsY0MQ6r2QREuDjvWmgjIA';
+    
+    console.log(`Fetching video info for video ID: ${videoId}`);
+    const response = await fetch(`https://www.googleapis.com/youtube/v3/videos?part=snippet,contentDetails,statistics&id=${videoId}&key=${apiKey}`);
     
     if (!response.ok) {
+      console.error(`YouTube API returned status: ${response.status}`);
       throw new Error(`YouTube API returned status: ${response.status}`);
     }
     
     const data = await response.json();
     
     if (!data.items || data.items.length === 0) {
+      console.error('Video not found');
       throw new Error('Video not found');
     }
     
-    return data.items[0].snippet;
+    console.log('Successfully retrieved video info');
+    return data.items[0];
   } catch (error) {
     console.error('Error getting video info:', error);
-    
-    // Return placeholder info
-    return {
-      title: 'YouTube Video',
-      description: 'No description available',
-      publishedAt: new Date().toISOString()
-    };
+    throw error;
   }
 }
 
 function generateSummaryFromVideoInfo(videoInfo, outputType) {
-  // Generate a summary based on the video title and description
-  const title = videoInfo.title || 'YouTube Video';
-  const description = videoInfo.description || 'No description available';
-  const publishedAt = videoInfo.publishedAt ? new Date(videoInfo.publishedAt).toLocaleDateString() : 'Unknown date';
-  
-  let summary = `# ${title}\n\n`;
-  summary += `Published on: ${publishedAt}\n\n`;
-  summary += `## Summary\n\n`;
-  
-  if (description.length > 0) {
-    summary += `${description}\n\n`;
-  } else {
-    summary += `No description available for this video.\n\n`;
+  try {
+    console.log('Generating summary from video info');
+    
+    // Extract relevant information
+    const snippet = videoInfo.snippet || {};
+    const statistics = videoInfo.statistics || {};
+    const contentDetails = videoInfo.contentDetails || {};
+    
+    const title = snippet.title || 'Untitled Video';
+    const description = snippet.description || 'No description available';
+    const channelTitle = snippet.channelTitle || 'Unknown Channel';
+    const publishedAt = snippet.publishedAt ? new Date(snippet.publishedAt).toLocaleDateString() : 'Unknown date';
+    const viewCount = statistics.viewCount ? parseInt(statistics.viewCount).toLocaleString() : 'Unknown';
+    const likeCount = statistics.likeCount ? parseInt(statistics.likeCount).toLocaleString() : 'Unknown';
+    const commentCount = statistics.commentCount ? parseInt(statistics.commentCount).toLocaleString() : 'Unknown';
+    
+    // Format duration
+    let duration = 'Unknown duration';
+    if (contentDetails.duration) {
+      // Convert ISO 8601 duration to readable format
+      const match = contentDetails.duration.match(/PT(\d+H)?(\d+M)?(\d+S)?/);
+      const hours = (match[1] || '').replace('H', '');
+      const minutes = (match[2] || '').replace('M', '');
+      const seconds = (match[3] || '').replace('S', '');
+      
+      duration = '';
+      if (hours) duration += `${hours} hours `;
+      if (minutes) duration += `${minutes} minutes `;
+      if (seconds) duration += `${seconds} seconds`;
+      duration = duration.trim();
+    }
+    
+    // Generate summary based on output type
+    let summary = '';
+    
+    if (outputType === 'summary') {
+      summary = `# ${title}\n\n`;
+      summary += `**Channel:** ${channelTitle}\n`;
+      summary += `**Published:** ${publishedAt}\n`;
+      summary += `**Duration:** ${duration}\n`;
+      summary += `**Views:** ${viewCount} | **Likes:** ${likeCount} | **Comments:** ${commentCount}\n\n`;
+      
+      summary += `## Summary\n\n`;
+      
+      if (description.length > 0) {
+        // Clean up and format the description
+        const cleanDescription = description
+          .replace(/\n{3,}/g, '\n\n')  // Replace multiple newlines with double newlines
+          .trim();
+        
+        summary += `${cleanDescription}\n\n`;
+      } else {
+        summary += `No description available for this video.\n\n`;
+      }
+      
+      summary += `## Note\n\n`;
+      summary += `This summary was generated based on the video's metadata. For a more detailed understanding, please watch the full video on YouTube.`;
+    } else if (outputType === 'notes') {
+      summary = `# Notes: ${title}\n\n`;
+      summary += `**Channel:** ${channelTitle}\n`;
+      summary += `**Published:** ${publishedAt}\n\n`;
+      
+      summary += `## Key Points\n\n`;
+      
+      // Extract potential key points from description
+      const lines = description.split('\n').filter(line => line.trim().length > 0);
+      
+      if (lines.length > 0) {
+        for (let i = 0; i < Math.min(lines.length, 10); i++) {
+          summary += `- ${lines[i]}\n`;
+        }
+        
+        if (lines.length > 10) {
+          summary += `- ... (additional content in the description)\n`;
+        }
+      } else {
+        summary += `- No key points could be extracted from the video description\n`;
+        summary += `- For detailed information, please watch the video\n`;
+      }
+      
+      summary += `\n## Video Statistics\n\n`;
+      summary += `- Duration: ${duration}\n`;
+      summary += `- Views: ${viewCount}\n`;
+      summary += `- Likes: ${likeCount}\n`;
+      summary += `- Comments: ${commentCount}\n\n`;
+      
+      summary += `This is an automated summary based on the video metadata. For complete information, please watch the full video.`;
+    }
+    
+    console.log('Summary generated successfully');
+    return summary;
+  } catch (error) {
+    console.error('Error generating summary from video info:', error);
+    
+    // Return a simple fallback summary
+    return `Summary for YouTube video: Unable to generate a detailed summary due to an error. Please watch the video directly.`;
   }
-  
-  summary += `## Note\n\n`;
-  summary += `This summary was generated based on the video's metadata. For a more detailed understanding, please watch the full video on YouTube.`;
-  
-  return summary;
 }
