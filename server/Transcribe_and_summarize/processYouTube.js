@@ -13,7 +13,7 @@ import { generatePDF } from './GeneratePDF.js';
 import { extractVideoId } from '../utils/youtubeUtils.js';
 import fetch from 'node-fetch';
 import { dirname } from 'path';
-import { transcribeAudio } from './Transcribe.js';
+import { transcribeAudio } from './transcribeAndSummarize.js';
 
 const execAsync = promisify(exec);
 const __filename = fileURLToPath(import.meta.url);
@@ -25,34 +25,6 @@ const deepgram = createClient(deepgramApiKey);
 
 // Configure Gemini with hardcoded key
 const genAI = new GoogleGenerativeAI('AIzaSyCzIsCmQVuaiUKd0TqaIctPVZ0Bj_3i11A');
-
-// Function to transcribe audio
-async function transcribeAudio(audioPath) {
-  try {
-    console.log(`Transcribing audio file: ${audioPath}`);
-    
-    // Read the audio file
-    const audioFile = fs.readFileSync(audioPath);
-    
-    // Transcribe with Deepgram
-    const { result } = await deepgram.listen.prerecorded.transcribeFile(
-      audioFile,
-      {
-        model: 'whisper',
-        language: 'he',
-        smart_format: true,
-      }
-    );
-    
-    const transcript = result.results.channels[0].alternatives[0].transcript;
-    console.log(`Transcription complete: ${transcript.substring(0, 100)}...`);
-    
-    return transcript;
-  } catch (error) {
-    console.error('Error transcribing audio:', error);
-    throw error;
-  }
-}
 
 // Function to summarize text
 async function summarizeText(text) {

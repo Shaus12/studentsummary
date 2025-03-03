@@ -16,6 +16,7 @@ import { createClient } from '@deepgram/sdk';
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import fs from 'fs';
 import puppeteer from 'puppeteer';
+import { transcribeAudio } from './Transcribe_and_summarize/transcribeAndSummarize.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -741,41 +742,3 @@ const generatePDF = async (summary, title) => {
   await browser.close();
   return pdf;
 };
-
-// Update the transcribeAudio function
-async function transcribeAudio(audioPath) {
-  try {
-    console.log(`Transcribing audio file: ${audioPath}`);
-    
-    // Check if the file exists
-    if (!fs.existsSync(audioPath)) {
-      throw new Error(`Audio file not found: ${audioPath}`);
-    }
-    
-    // Read the file as a buffer
-    const audioBuffer = await fs.promises.readFile(audioPath);
-    
-    // Use Deepgram's prerecorded API with the buffer
-    const response = await deepgram.listen.prerecorded.transcribeFile(
-      { buffer: audioBuffer, mimetype: 'audio/mp3' },
-      {
-        smart_format: true,
-        model: 'nova-2',
-        language: 'he'
-      }
-    );
-    
-    if (!response || !response.results || !response.results.channels || response.results.channels.length === 0) {
-      throw new Error('Invalid response from Deepgram');
-    }
-    
-    // Extract the transcript
-    const transcript = response.results.channels[0].alternatives[0].transcript;
-    
-    console.log(`Transcription completed, length: ${transcript.length}`);
-    return transcript;
-  } catch (error) {
-    console.error('Deepgram error:', error);
-    throw error;
-  }
-}

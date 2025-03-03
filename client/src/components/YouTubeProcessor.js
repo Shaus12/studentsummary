@@ -85,4 +85,31 @@ useEffect(() => {
       clearInterval(pollingIntervalId);
     }
   };
-}, [pollingIntervalId]); 
+}, [pollingIntervalId]);
+
+async function getVideoInfo(videoId) {
+  try {
+    const apiKey = process.env.YOUTUBE_API_KEY || 'AIzaSyAZ78Gva-kSMxsY0MQ6r2QREuDjvWmgjIA'; // Ensure this is set correctly
+    console.log(`Fetching video info for video ID: ${videoId}`);
+    
+    const response = await fetch(`https://www.googleapis.com/youtube/v3/videos?part=snippet,contentDetails,statistics&id=${videoId}&key=${apiKey}`);
+    
+    if (!response.ok) {
+      console.error(`YouTube API returned status: ${response.status}`);
+      throw new Error(`YouTube API returned status: ${response.status}`);
+    }
+    
+    const data = await response.json();
+    
+    if (!data.items || data.items.length === 0) {
+      console.error('Video not found');
+      throw new Error('Video not found');
+    }
+    
+    console.log('Successfully retrieved video info');
+    return data.items[0];
+  } catch (error) {
+    console.error('Error getting video info:', error);
+    throw error;
+  }
+} 
