@@ -23,6 +23,9 @@ if (!fs.existsSync(tempDir)) {
   fs.mkdirSync(tempDir, { recursive: true });
 }
 
+// Supadata API key
+const SUPADATA_API_KEY = 'eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiIsImtpZCI6IjEifQ.eyJpc3MiOiJuYWRsZXMiLCJpYXQiOiIxNzQxMDMxNjAwIiwicHVycG9zZSI6ImFwaV9hdXRoZW50aWNhdGlvbiIsInN1YiI6ImFmOTRhM2YzNmJhZDQ4OThiODU5NDFiNjFiNDllMDczIn0.UrmgeY-pgd81QEOKUWRB_NISwmmCXkJMw-GwmSd21Nc';
+
 /**
  * Extracts video ID from YouTube URL
  * @param {string} url - YouTube URL
@@ -30,9 +33,12 @@ if (!fs.existsSync(tempDir)) {
  */
 const extractVideoId = (url) => {
   if (!url) return null;
-  const regex = /(?:youtube\.com\/(?:[^\/]+\/.+\/|(?:v|e(?:mbed)?)\/|.*[?&]v=)|youtu\.be\/)([^"&?\/\s]{11})/;
-  const match = url.match(regex);
-  return match && match[1] ? match[1] : null;
+  
+  // Handle different YouTube URL formats
+  const regExp = /^.*(youtu.be\/|v\/|e\/|u\/\w+\/|embed\/|v=)([^#\&\?]*).*/;
+  const match = url.match(regExp);
+  
+  return (match && match[2].length === 11) ? match[2] : null;
 };
 
 /**
@@ -284,63 +290,112 @@ const downloadYouTubeAudio = async (videoId) => {
     
     const outputPath = path.join(tempDir, `audio_${Date.now()}.mp3`);
     
-    // Try with advanced options first
+    // Try with VPN first
     try {
-      // This command uses multiple techniques to bypass restrictions
-      const command = `yt-dlp -x --audio-format mp3 --audio-quality 0 --extractor-args "youtube:player_client=android,web" --user-agent "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/133.0.0.0 Safari/537.36" --add-header "Accept-Language: en-US,en;q=0.9" --sleep-interval 1 --max-sleep-interval 5 --geo-bypass-country US -o "${outputPath}" https://www.youtube.com/watch?v=${videoId}`;
+      // Connect to VPN
+      console.log("Connecting to VPN...");
+      await execAsync('sudo openvpn --config /path/to/your/vpn/config.ovpn --daemon');
       
-      console.log(`Running command with advanced options: ${command}`);
+      // Wait a moment for the VPN connection to establish
+      await new Promise(resolve => setTimeout(resolve, 5000));
+      
+      const command = `yt-dlp -x --audio-format mp3 --audio-quality 0 -o "${outputPath}" https://www.youtube.com/watch?v=${videoId}`;
+      console.log(`Running command with VPN: ${command}`);
       
       const { stdout } = await execAsync(command);
       console.log(`YouTube download output: ${stdout}`);
+      
+      // Disconnect from VPN
+      await execAsync('sudo killall openvpn');
+      
       return outputPath;
-    } catch (advancedError) {
-      console.log("Error with advanced options, trying alternative approach...");
-      console.log(advancedError.message);
+    } catch (vpnError) {
+      console.log("Error with VPN method, trying alternative approaches...");
+      
+      // Disconnect from VPN if it's still running
+      try {
+        await execAsync('sudo killall openvpn');
+      } catch (e) {
+        // Ignore errors if openvpn wasn't running
+      }
       
       // Try with cookies from browser
       try {
-        // Try with a different player client
-        const command = `yt-dlp -x --audio-format mp3 --audio-quality 0 --cookies-from-browser chrome --extractor-args "youtube:player_client=ios" --geo-bypass -o "${outputPath}" https://www.youtube.com/watch?v=${videoId}`;
-        console.log(`Running command with cookies: ${command}`);
+        const command = `yt-dlp -x --audio-format mp3 --audio-quality 0 --cookies-from-browser chrome -o "${outputPath}" https://www.youtube.com/watch?v=${videoId}`;
+        console.log(`Running command: ${command}`);
         
         const { stdout } = await execAsync(command);
         console.log(`YouTube download output: ${stdout}`);
         return outputPath;
-      } catch (cookiesError) {
-        console.log("Error with cookies method, trying third approach...");
+      } catch (error) {
+        console.log("Error with cookies-from-browser method, trying alternative approach...");
         
-        // Try with embed page approach
+        // If that fails, try with other options
+        const command = `yt-dlp -x --audio-format mp3 --audio-quality 0 --no-check-certificate --force-ipv4 --geo-bypass -o "${outputPath}" https://www.youtube.com/watch?v=${videoId}`;
+        console.log(`Running command: ${command}`);
+        
         try {
-          const command = `yt-dlp -x --audio-format mp3 --audio-quality 0 --referer "https://www.google.com/" --add-header "Origin:https://www.youtube.com" --embed-metadata --no-check-certificate --force-ipv4 -o "${outputPath}" https://www.youtube.com/embed/${videoId}`;
-          console.log(`Running embed approach: ${command}`);
-          
           const { stdout } = await execAsync(command);
           console.log(`YouTube download output: ${stdout}`);
           return outputPath;
-        } catch (embedError) {
-          console.log("Error with embed approach, trying final method...");
-          
-          // Last resort: try with invidious
-          try {
-            const command = `yt-dlp -x --audio-format mp3 --audio-quality 0 -o "${outputPath}" https://invidious.snopyta.org/watch?v=${videoId}`;
-            console.log(`Running invidious approach: ${command}`);
-            
-            const { stdout } = await execAsync(command);
-            console.log(`YouTube download output: ${stdout}`);
-            return outputPath;
-          } catch (invidiousError) {
-            if (invidiousError.stderr && invidiousError.stderr.includes("Sign in to confirm you're not a bot")) {
-              throw new Error("YouTube is requiring authentication to access this video. Please try a different video or try again later.");
-            } else {
-              throw invidiousError;
-            }
+        } catch (downloadError) {
+          if (downloadError.stderr && downloadError.stderr.includes("Sign in to confirm you're not a bot")) {
+            throw new Error("YouTube is requiring authentication to access this video. Please try a different video or try again later.");
+          } else {
+            throw downloadError;
           }
         }
       }
     }
   } catch (error) {
     console.error("Error downloading YouTube audio:", error);
+    throw error;
+  }
+};
+
+/**
+ * Gets transcript from Supadata API
+ * @param {string} videoId - YouTube video ID
+ * @returns {Promise<string>} - Transcript text
+ */
+const getSupadataTranscript = async (videoId) => {
+  try {
+    console.log(`Attempting to get transcript from Supadata API for video ID: ${videoId}`);
+    
+    const response = await axios.get(`https://api.supadata.ai/v1/youtube/transcript`, {
+      params: {
+        videoId: videoId
+      },
+      headers: {
+        'x-api-key': SUPADATA_API_KEY
+      }
+    });
+    
+    if (response.data && response.data.transcript) {
+      console.log('Successfully retrieved transcript from Supadata API');
+      
+      // Format the transcript
+      let transcriptText = '';
+      if (Array.isArray(response.data.transcript)) {
+        // If it's an array of transcript segments
+        transcriptText = response.data.transcript
+          .map(segment => segment.text)
+          .join(' ');
+      } else if (typeof response.data.transcript === 'string') {
+        // If it's already a string
+        transcriptText = response.data.transcript;
+      }
+      
+      return transcriptText;
+    } else {
+      throw new Error('No transcript data in Supadata API response');
+    }
+  } catch (error) {
+    console.error('Error with Supadata API:', error.message);
+    if (error.response) {
+      console.error('Supadata API response status:', error.response.status);
+      console.error('Supadata API response data:', error.response.data);
+    }
     throw error;
   }
 };
@@ -362,40 +417,77 @@ const processYouTube = async (youtubeUrl, outputType = 'summary', options = {}) 
       throw new Error('Invalid YouTube URL');
     }
     
-    // Try to get transcript first
-    let transcription;
+    let transcription = '';
+    let videoTitle = '';
+    
+    // Try to get transcript using Supadata API first (new primary method)
     try {
-      transcription = await getYouTubeTranscript(videoId);
-      console.log("Successfully retrieved transcript");
-    } catch (transcriptError) {
-      console.log('Falling back to audio transcription...');
-      console.log('No transcript available, attempting to download audio...');
+      transcription = await getSupadataTranscript(videoId);
+      console.log('Successfully obtained transcript from Supadata API');
+    } catch (supadataError) {
+      console.log(`Error with Supadata API: ${supadataError.message}`);
       
+      // Fall back to youtube-transcript-api
       try {
-        // Try with yt-dlp first
-        let audioPath;
-        try {
-          audioPath = await downloadYouTubeAudio(videoId);
-        } catch (ytdlpError) {
-          console.log('Error with yt-dlp, trying Puppeteer approach...');
-          audioPath = await downloadYouTubeAudioWithPuppeteer(videoId);
-        }
+        console.log(`Attempting to get transcript using youtube-transcript-api for video ID: ${videoId}`);
+        const transcriptData = await YoutubeTranscript.fetchTranscript(videoId);
         
-        // Here you would call your transcription function
-        transcription = await transcribeAudio(audioPath);
-        
-        // Clean up the audio file
-        try {
-          fs.unlinkSync(audioPath);
-        } catch (cleanupError) {
-          console.error('Error cleaning up audio file:', cleanupError);
-        }
-      } catch (downloadError) {
-        if (downloadError.message.includes("YouTube is requiring authentication")) {
-          throw new Error("YouTube is requiring authentication to access this video. Please try a different video or try again later.");
+        if (transcriptData && transcriptData.length > 0) {
+          transcription = transcriptData.map(item => item.text).join(' ');
+          console.log('Successfully obtained transcript from youtube-transcript-api');
         } else {
-          console.error("Error downloading or transcribing audio:", downloadError);
-          throw new Error("Failed to process YouTube video. YouTube may be blocking automated access. Please try a different video or try again later.");
+          throw new Error('No transcript data returned from youtube-transcript-api');
+        }
+      } catch (ytTranscriptError) {
+        console.log(`Error with youtube-transcript-api: ${ytTranscriptError.message}`);
+        
+        // Fall back to YouTube API
+        try {
+          console.log(`Getting video info for video ID: ${videoId} via API`);
+          const videoInfo = await getVideoInfo(videoId);
+          videoTitle = videoInfo.title;
+          
+          if (videoInfo.transcript) {
+            transcription = videoInfo.transcript;
+            console.log(`Successfully obtained transcript from YouTube API`);
+          } else {
+            throw new Error(`No transcript available for video: "${videoTitle}"`);
+          }
+        } catch (apiError) {
+          console.log(`Error with YouTube API: ${apiError.message}`);
+          console.log('Falling back to audio transcription...');
+          
+          // Fall back to audio download and transcription
+          try {
+            console.log('No transcript available, attempting to download audio...');
+            
+            // Try with yt-dlp first
+            let audioPath;
+            try {
+              audioPath = await downloadYouTubeAudio(videoId);
+            } catch (ytdlpError) {
+              console.log('Error with yt-dlp, trying Puppeteer approach...');
+              try {
+                audioPath = await downloadYouTubeAudioWithPuppeteer(videoId);
+              } catch (puppeteerError) {
+                console.log('Error with Puppeteer, trying proxy approach...');
+                audioPath = await downloadYouTubeAudioWithProxy(videoId);
+              }
+            }
+            
+            // Transcribe the audio
+            transcription = await transcribeAudio(audioPath);
+            
+            // Clean up the audio file
+            try {
+              await fs.promises.unlink(audioPath);
+            } catch (cleanupError) {
+              console.error('Error cleaning up audio file:', cleanupError);
+            }
+          } catch (downloadError) {
+            console.error('Error downloading or transcribing audio:', downloadError);
+            throw new Error('Failed to process YouTube video. YouTube may be blocking automated access. Please try a different video or try again later.');
+          }
         }
       }
     }
@@ -407,11 +499,23 @@ const processYouTube = async (youtubeUrl, outputType = 'summary', options = {}) 
     
     // Process the transcription based on output type
     if (outputType === "summary") {
-      return await summarizeText(transcription, options);
+      const summaryOptions = options.summaryOptions || {};
+      const summary = await summarizeText(transcription, summaryOptions);
+      
+      return {
+        videoId,
+        title: videoTitle,
+        summary,
+        transcription: options.includeTranscription ? transcription : undefined
+      };
     } else if (outputType === "questions") {
       return await generateQuestions(transcription, options);
     } else {
-      return transcription;
+      return {
+        videoId,
+        title: videoTitle,
+        transcription
+      };
     }
   } catch (error) {
     console.error("Error processing YouTube video:", error);
@@ -426,5 +530,6 @@ export {
   getVideoInfo,
   processYouTube,
   downloadYouTubeAudio,
-  downloadYouTubeAudioWithPuppeteer
+  downloadYouTubeAudioWithPuppeteer,
+  getSupadataTranscript
 }; 
