@@ -295,7 +295,8 @@ app.post("/api/process-youtube", async (req, res) => {
       params: req.params
     });
     
-    const youtubeUrl = req.body.youtubeUrl || req.query.youtubeUrl;
+    // Use let instead of const for youtubeUrl so we can reassign it
+    let youtubeUrl = req.body.youtubeUrl || req.query.youtubeUrl;
     console.log('YouTube URL:', youtubeUrl);
     
     // Check if the URL might be in a different property
