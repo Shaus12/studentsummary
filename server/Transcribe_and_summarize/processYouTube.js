@@ -8,12 +8,12 @@ import { getYouTubeTranscript } from './YouTubeTranscript.js';
 import puppeteer from 'puppeteer';
 import { createClient } from '@deepgram/sdk';
 import { GoogleGenerativeAI } from '@google/generative-ai';
-import { transcribeAudio } from './Transcribe.js';
 import { summarizeText } from './Summarize.js';
 import { generatePDF } from './GeneratePDF.js';
 import { extractVideoId } from '../utils/youtubeUtils.js';
 import fetch from 'node-fetch';
 import { dirname } from 'path';
+import { transcribeAudio } from './Transcribe.js';
 
 const execAsync = promisify(exec);
 const __filename = fileURLToPath(import.meta.url);
@@ -169,88 +169,85 @@ export async function processYouTube(youtubeUrl, outputType = 'summary', options
       throw new Error('Invalid YouTube URL');
     }
     
-    // Get video info for metadata
-    const videoInfo = await getVideoInfo(videoId);
+    let content = null;
+    let method = 'api';
     
-    // Try to download audio and transcribe it
+    // Try to get content from YouTube
     try {
-      console.log("Downloading audio from YouTube...");
-      const audioPath = await downloadYouTubeAudio(youtubeUrl);
-      console.log(`Audio downloaded to ${audioPath}`);
+      console.log("Attempting to get content from YouTube...");
+      const result = await downloadYouTubeAudio(youtubeUrl);
       
-      // Transcribe the audio
-      console.log("Transcribing audio...");
-      const transcription = await transcribeAudio(audioPath);
-      console.log("Audio transcribed successfully");
-      
-      // Clean up the audio file
-      fs.unlinkSync(audioPath);
-      
-      // Generate summary using the transcription
-      console.log("Generating summary from transcription...");
-      const summary = await summarizeText(transcription, options);
-      
-      return {
-        summary,
-        pdfPath: null,
-        method: 'transcription'
-      };
-    } catch (error) {
-      console.error("Error processing audio:", error);
-      
-      // Fallback to using video metadata
-      console.log("Falling back to video metadata...");
-      
-      // Get title and description
-      const title = videoInfo.snippet.title;
-      const description = videoInfo.snippet.description;
-      
-      // Format metadata for display
-      const language = options.language || 'en';
-      const labels = {
-        en: {
-          videoInfo: 'Video Information',
-          channel: 'Channel',
-          published: 'Published',
-          duration: 'Duration',
-          views: 'Views',
-          likes: 'Likes',
-          comments: 'Comments',
-          description: 'Description',
-          note: 'Note',
-          limitationsHeader: 'Limitations',
-          limitationsText: 'We were unable to access the video content directly. This information is based on the video metadata only.'
-        },
-        he: {
-          videoInfo: 'מידע על הסרטון',
-          channel: 'ערוץ',
-          published: 'פורסם',
-          duration: 'משך',
-          views: 'צפיות',
-          likes: 'לייקים',
-          comments: 'תגובות',
-          description: 'תיאור',
-          note: 'הערה',
-          limitationsHeader: 'מגבלות',
-          limitationsText: 'לא הצלחנו לגשת לתוכן הסרטון ישירות. מידע זה מבוסס על המטא-דאטה של הסרטון בלבד.'
-        }
-      };
-      
-      const l = labels[language] || labels.en;
-      
-      // Format the metadata as a summary
-      let summary = `# ${title}\n\n`;
-      summary += `## ${l.limitationsHeader}\n\n`;
-      summary += `${l.limitationsText}\n\n`;
-      summary += `## ${l.description}\n\n`;
-      summary += description;
+      if (result.transcript) {
+        // If we got a transcript directly
+        content = result.transcript;
+        method = 'transcript';
+        console.log("Using transcript from YouTube");
+      } else if (result.audioPath) {
+        // If we got an audio file, transcribe it
+        console.log("Transcribing downloaded audio...");
+        content = await transcribeAudio(result.audioPath);
+        method = 'transcription';
+        console.log("Using transcribed audio");
+        
+        // Clean up the audio file
+        fs.unlinkSync(result.audioPath);
+      }
+    } catch (contentError) {
+      console.error("Error getting content from YouTube:", contentError);
+      // Continue to fallback method
+    }
+    
+    // If we couldn't get content, fall back to video info
+    if (!content) {
+      try {
+        console.log("Falling back to video metadata...");
+        const videoInfo = await getVideoInfo(videoId);
+        
+        // Get title and description
+        const title = videoInfo.snippet.title;
+        const description = videoInfo.snippet.description;
+        const channelTitle = videoInfo.snippet.channelTitle;
+        const publishedAt = new Date(videoInfo.snippet.publishedAt).toLocaleDateString();
+        
+        // Format metadata for display
+        const language = options.language || 'en';
+        
+        // Simple summary based on video metadata
+        let summary = `# ${title}\n\n`;
+        summary += `Channel: ${channelTitle}\n`;
+        summary += `Published: ${publishedAt}\n\n`;
+        summary += `## Description\n\n`;
+        summary += description;
+        
+        return {
+          summary,
+          pdfPath: null,
+          method: 'metadata'
+        };
+      } catch (videoInfoError) {
+        console.error("Error getting video info:", videoInfoError);
+        throw new Error("Failed to get any content from the YouTube video");
+      }
+    }
+    
+    // If we have content, summarize it
+    if (content) {
+      console.log("Summarizing content...");
+      const summary = await summarizeText(content, options);
       
       return {
         summary,
         pdfPath: null,
-        method: 'metadata'
+        method
       };
     }
+    
+    // If we somehow got here without content or an error, return a generic message
+    return {
+      summary: "Unable to process this YouTube video. Please try another video.",
+      pdfPath: null,
+      method: 'error'
+    };
   } catch (error) {
     console.error('Error in processYouTube:', error);
     
