@@ -91,41 +91,6 @@ const checkAndUpdateUsage = async (userEmail) => {
   try {
     // For now, just allow all users
     return { allowed: true };
-    
-    /* Commenting out the problematic code
-    // First check membership type
-    const membershipResult = await db.query(
-      "SELECT membership_type FROM users WHERE email = $1",
-      [userEmail]
-    );
-    
-    // If membership_type is null or doesn't exist, assume 'free'
-    const membershipType = membershipResult.rows[0]?.membership_type || 'free';
-    
-    if (membershipType === 'premium') {
-      return { allowed: true };
-    }
-
-    // For free users, check their usage in the last 7 days
-    const usageResult = await db.query(`
-      SELECT COUNT(*) as usage_count 
-      FROM summaries 
-      WHERE user_email = $1 
-      AND created_at > NOW() - INTERVAL '7 days'`,
-      [userEmail]
-    );
-
-    const usageCount = parseInt(usageResult.rows[0].usage_count);
-    
-    if (usageCount >= 10) {
-      return {
-        allowed: false,
-        message: "You have reached your weekly limit of 10 transcriptions. Upgrade to premium for unlimited use!"
-      };
-    }
-
-    return { allowed: true };
-    */
   } catch (error) {
     console.error('Error checking usage:', error);
     // If there's an error, allow the user to proceed
@@ -322,11 +287,11 @@ app.post("/api/google-login", async (req, res) => {
 
 app.post("/api/process-youtube", async (req, res) => {
   try {
-    console.log('Full request body:', JSON.stringify(req.body));
-    const { youtubeUrl, outputType = 'summary' } = req.body; // Default to 'summary' if not provided
     console.log('Processing YouTube video request received');
+    console.log('Request body:', req.body);
+    
+    const youtubeUrl = req.body.youtubeUrl;
     console.log('YouTube URL:', youtubeUrl);
-    console.log('Output Type:', outputType);
     
     // Validate YouTube URL
     if (!youtubeUrl || typeof youtubeUrl !== 'string') {
@@ -341,57 +306,35 @@ app.post("/api/process-youtube", async (req, res) => {
       return res.status(401).json({ error: 'No authorization token provided' });
     }
     
-    try {
-      const decoded = jwt.verify(token, process.env.JWT_SECRET);
-      const userEmail = decoded.email;
-      
-      // Check usage limits
-      const usageCheck = await checkAndUpdateUsage(userEmail);
-      if (!usageCheck.allowed) {
-        return res.status(403).json({ message: usageCheck.message });
-      }
-      
-      // For now, return a temporary response
-      const summary = "This is a temporary response while we fix the YouTube processing functionality.";
-      const pdfPath = null;
-      
-      // Save to database
-      console.log('Saving to database...');
-      const query = `
-        INSERT INTO summaries (user_email, video_url, summary, pdf_path)
-        VALUES ($1, $2, $3, $4)
-        RETURNING id
-      `;
-      const values = [userEmail, youtubeUrl, summary, pdfPath];
-      const dbResult = await db.query(query, values);
-      console.log('Saved to database successfully');
-      
-      res.json({ 
-        success: true,
-        method: "temporary",
-        summary: summary,
-        pdfPath: pdfPath
-      });
-      
-      // Process the YouTube video in the background (don't wait for it)
-      /*
-      processYouTube(youtubeUrl, outputType)
-        .then(result => {
-          console.log('YouTube processing completed successfully');
-          // Update the database with the actual summary and PDF path
-          db.query(
-            'UPDATE summaries SET summary = $1, pdf_path = $2 WHERE id = $3',
-            [result.summary, result.pdfPath, dbResult.rows[0].id]
-          );
-        })
-        .catch(error => {
-          console.error('Error processing YouTube video in background:', error);
-        });
-      */
-    } catch (processingError) {
-      console.error('Error during processing:', processingError);
-      res.status(500).json({ error: 'Error processing video: ' + processingError.message });
+    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    const userEmail = decoded.email;
+    
+    // Check usage limits (simplified)
+    const usageCheck = await checkAndUpdateUsage(userEmail);
+    if (!usageCheck.allowed) {
+      return res.status(403).json({ message: usageCheck.message });
     }
+    
+    // Generate a simple summary
+    const summary = `This is a temporary summary for the YouTube video: ${youtubeUrl}. We are working on improving our processing capabilities.`;
+    
+    // Save to database
+    console.log('Saving to database...');
+    const query = `
+      INSERT INTO summaries (user_email, video_url, summary, pdf_path)
+      VALUES ($1, $2, $3, $4)
+      RETURNING id
+    `;
+    const values = [userEmail, youtubeUrl, summary, null];
+    const dbResult = await db.query(query, values);
+    console.log('Saved to database successfully');
+    
+    res.json({ 
+      success: true,
+      method: "temporary",
+      summary: summary,
+      pdfPath: null
+    });
   } catch (error) {
     console.error('Error in process-youtube endpoint:', error);
     res.status(400).json({ error: 'Error processing video: ' + error.message });
