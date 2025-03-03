@@ -358,7 +358,7 @@ app.post("/api/process-youtube", async (req, res) => {
     
     // Save the result to the database
     const insertResult = await db.query(
-      `INSERT INTO summaries (user_email, youtube_url, summary, pdf_path, created_at)
+      `INSERT INTO summaries (user_email, video_url, summary, pdf_path, created_at)
        VALUES ($1, $2, $3, $4, NOW())
        RETURNING id`,
       [userEmail, youtubeUrl, result.summary, result.pdfPath]
@@ -476,7 +476,7 @@ app.get('/api/summaries', async (req, res) => {
     
     // Get summaries for the user
     const result = await db.query(
-      `SELECT id, youtube_url, file_name, summary, pdf_path, created_at
+      `SELECT id, video_url, file_name, summary, pdf_path, created_at, title
        FROM summaries
        WHERE user_email = $1
        ORDER BY created_at DESC`,
@@ -486,7 +486,7 @@ app.get('/api/summaries', async (req, res) => {
     // Format the results
     const summaries = result.rows.map(row => ({
       id: row.id,
-      source: row.youtube_url || row.file_name,
+      source: row.video_url || row.file_name || row.title || 'Unknown source',
       summary: row.summary,
       pdfPath: row.pdf_path ? `/files/${path.basename(row.pdf_path)}` : null,
       createdAt: row.created_at
@@ -522,7 +522,7 @@ app.get('/api/summary/:id', async (req, res) => {
     
     // Get the summary
     const result = await db.query(
-      `SELECT id, youtube_url, file_name, summary, pdf_path, created_at
+      `SELECT id, video_url, file_name, summary, pdf_path, created_at, title
        FROM summaries
        WHERE id = $1 AND user_email = $2`,
       [summaryId, userEmail]
@@ -536,7 +536,7 @@ app.get('/api/summary/:id', async (req, res) => {
     
     res.json({
       id: summary.id,
-      source: summary.youtube_url || summary.file_name,
+      source: summary.video_url || summary.file_name || summary.title || 'Unknown source',
       summary: summary.summary,
       pdfPath: summary.pdf_path ? `/files/${path.basename(summary.pdf_path)}` : null,
       createdAt: summary.created_at
