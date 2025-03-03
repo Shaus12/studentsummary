@@ -99,6 +99,24 @@ const getYouTubeTranscript = async (videoId) => {
     console.log(`Getting transcript for video ID: ${videoId} via API (fallback method)`);
     try {
       const apiKey = process.env.YOUTUBE_API_KEY;
+      console.log(`Using YouTube API Key: ${apiKey ? apiKey.substring(0, 5) + '...' : 'undefined'}`);
+      
+      // First, check if the API key is valid by making a simple request
+      try {
+        const testResponse = await axios.get(
+          `https://www.googleapis.com/youtube/v3/videos?part=snippet&id=${videoId}&key=${apiKey}`
+        );
+        console.log(`API key validation successful. Response status: ${testResponse.status}`);
+      } catch (testError) {
+        console.error(`API key validation failed: ${testError.message}`);
+        if (testError.response) {
+          console.error(`Response status: ${testError.response.status}`);
+          console.error(`Response data: ${JSON.stringify(testError.response.data)}`);
+        }
+        throw new Error(`YouTube API key validation failed: ${testError.message}`);
+      }
+      
+      // If we get here, the API key is valid, so try to get captions
       const captionsResponse = await axios.get(
         `https://www.googleapis.com/youtube/v3/captions?part=snippet&videoId=${videoId}&key=${apiKey}`
       );
