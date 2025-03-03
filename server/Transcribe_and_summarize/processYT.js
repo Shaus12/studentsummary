@@ -3,8 +3,6 @@ import { promisify } from 'util';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import { downloadYouTubeAudio } from './DownloadFromYT.js';
-import { getYouTubeTranscript } from './YouTubeTranscript.js';
 import puppeteer from 'puppeteer';
 import { createClient } from '@deepgram/sdk';
 import { GoogleGenerativeAI } from '@google/generative-ai';
@@ -19,6 +17,43 @@ const deepgram = createClient(deepgramApiKey);
 
 // Configure Gemini with hardcoded key
 const genAI = new GoogleGenerativeAI('AIzaSyCzIsCmQVuaiUKd0TqaIctPVZ0Bj_3i11A');
+
+// Function to download YouTube audio
+async function downloadYouTubeAudio(youtubeUrl, outputPath) {
+  try {
+    console.log(`Downloading audio from: ${youtubeUrl}`);
+    
+    // Extract video ID from URL
+    const videoIdMatch = youtubeUrl.match(/(?:youtube\.com\/(?:[^\/]+\/.+\/|(?:v|e(?:mbed)?)\/|.*[?&]v=)|youtu\.be\/)([^"&?\/\s]{11})/);
+    if (!videoIdMatch) {
+      throw new Error('Invalid YouTube URL');
+    }
+    
+    const videoId = videoIdMatch[1];
+    console.log(`Video ID: ${videoId}`);
+    
+    // Use youtube-dl to download audio
+    const command = `yt-dlp -x --audio-format mp3 --audio-quality 0 -o "${outputPath}" ${youtubeUrl}`;
+    console.log(`Executing command: ${command}`);
+    
+    const { stdout, stderr } = await execAsync(command);
+    console.log('Download stdout:', stdout);
+    
+    if (stderr) {
+      console.error('Download stderr:', stderr);
+    }
+    
+    console.log(`Audio downloaded to: ${outputPath}`);
+    
+    return {
+      method: 'download',
+      outputPath: outputPath
+    };
+  } catch (error) {
+    console.error('Error downloading YouTube audio:', error);
+    throw error;
+  }
+}
 
 // Function to transcribe audio
 async function transcribeAudio(audioPath) {
@@ -156,21 +191,12 @@ export async function processYouTube(youtubeUrl, outputType) {
     console.log(`Processing YouTube video: ${youtubeUrl}`);
     console.log(`Output type: ${outputType}`);
     
-    // Process the YouTube video with our hybrid approach
+    // Process the YouTube video
     const audioPath = path.join(__dirname, '..', 'temp', 'audio.mp3');
     const result = await downloadYouTubeAudio(youtubeUrl, audioPath);
     
-    let text;
-    
-    if (result.method === 'download') {
-      // If we successfully downloaded the audio, transcribe it
-      console.log('Audio downloaded successfully, transcribing...');
-      text = await transcribeAudio(result.outputPath);
-    } else if (result.method === 'transcript') {
-      // If we used the transcript API, use the transcript directly
-      console.log('Using transcript directly...');
-      text = result.transcript;
-    }
+    // Transcribe the audio
+    const text = await transcribeAudio(result.outputPath);
     
     console.log(`Text obtained, length: ${text?.length}`);
     
@@ -191,7 +217,7 @@ export async function processYouTube(youtubeUrl, outputType) {
     const pdfPath = await generatePDF(output);
     
     return {
-      method: result.method,
+      method: 'download',
       summary: output,
       pdfPath: pdfPath
     };
