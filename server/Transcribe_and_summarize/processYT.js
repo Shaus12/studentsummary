@@ -2,7 +2,7 @@ import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { extractVideoId, downloadYouTubeAudio, getYouTubeTranscript } from './YouTubeTranscript.js';
-import { summarizeText } from './audioProcessing.js';
+import { transcribeAudio, summarizeText, generatePDF } from './audioProcessing.js';
 import puppeteer from 'puppeteer';
 
 const __filename = fileURLToPath(import.meta.url);

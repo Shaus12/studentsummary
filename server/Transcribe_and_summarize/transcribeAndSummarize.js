@@ -1,6 +1,7 @@
 import { createClient } from '@deepgram/sdk';
 import fs from "fs/promises";
 import { GoogleGenerativeAI } from '@google/generative-ai';
+import { summarizeText } from './audioProcessing.js';
 
 // Configure Deepgram
 const deepgramApiKey = '26e3b5fc5fd1451123c9c799ede5d211ff94fce9';
@@ -82,7 +83,7 @@ async function processAndSummarize(filePath) {
       chunks.push(words.slice(i, i + chunkSize).join(" "));
     }
 
-    // Step 3: Summarize each chunk
+    // Step 3: Summarize each chunk using imported summarizeText
     const summaries = [];
     for (const [index, chunk] of chunks.entries()) {
       console.log(`Summarizing chunk ${index + 1}/${chunks.length}...`);
@@ -101,8 +102,5 @@ async function processAndSummarize(filePath) {
   }
 }
 
-// Import the functions from audioProcessing.js instead of defining them here
-import { summarizeText, generatePDF } from './audioProcessing.js';
-
 // Export only what's needed
-export { summarizeText, generatePDF, processAndSummarize };
+export { processAndSummarize };

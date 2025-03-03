@@ -8,8 +8,7 @@ import { getYouTubeTranscript } from './YouTubeTranscript.js';
 import puppeteer from 'puppeteer';
 import { createClient } from '@deepgram/sdk';
 import { GoogleGenerativeAI } from '@google/generative-ai';
-import { summarizeText } from './audioProcessing.js';
-import { generatePDF } from './GeneratePDF.js';
+import { summarizeText, generatePDF } from './audioProcessing.js';
 import { extractVideoId } from './YouTubeTranscript.js';
 import fetch from 'node-fetch';
 import { dirname } from 'path';
@@ -25,80 +24,6 @@ const deepgram = createClient(deepgramApiKey);
 
 // Configure Gemini with hardcoded key
 const genAI = new GoogleGenerativeAI('AIzaSyCzIsCmQVuaiUKd0TqaIctPVZ0Bj_3i11A');
-
-// Function to generate PDF
-async function generatePDF(content) {
-  try {
-    console.log('Generating PDF...');
-    
-    const outputPath = path.join(__dirname, '..', 'files', `summary_${Date.now()}.pdf`);
-    
-    // Format the content for PDF
-    const formattedContent = content.replace(/\n/g, '<br>');
-    
-    // Create HTML template
-    const html = `
-    <!DOCTYPE html>
-    <html lang="he" dir="rtl">
-      <head>
-        <meta charset="UTF-8">
-        <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <title>Summary</title>
-        <style>
-          body {
-            font-family: Arial, sans-serif;
-            line-height: 1.6;
-            direction: rtl;
-            text-align: right;
-            padding: 20px;
-          }
-          h1 {
-            text-align: center;
-            margin-bottom: 20px;
-          }
-          .content {
-            max-width: 800px;
-            margin: 0 auto;
-            background-color: #ffffff;
-            padding: 20px;
-            border-radius: 8px;
-            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
-          }
-        </style>
-      </head>
-      <body>
-        <h1>סיכום</h1>
-        <div class="content">
-          ${formattedContent}
-        </div>
-      </body>
-    </html>
-    `;
-    
-    // Generate PDF using puppeteer
-    const browser = await puppeteer.launch({ 
-      headless: true,
-      args: ['--no-sandbox', '--disable-setuid-sandbox']
-    });
-    const page = await browser.newPage();
-    await page.setContent(html, { waitUntil: 'domcontentloaded' });
-    await page.pdf({
-      path: outputPath,
-      format: 'A4',
-      printBackground: true,
-      margin: { top: '20mm', right: '20mm', bottom: '20mm', left: '20mm' }
-    });
-    await browser.close();
-    
-    console.log(`PDF generated at: ${outputPath}`);
-    
-    // Return the relative path for storage in the database
-    return `/files/${path.basename(outputPath)}`;
-  } catch (error) {
-    console.error('Error generating PDF:', error);
-    throw error;
-  }
-}
 
 // Main function to process YouTube videos
 export async function processYouTube(youtubeUrl, outputType = 'summary', options = {}) {
@@ -142,9 +67,12 @@ export async function processYouTube(youtubeUrl, outputType = 'summary', options
       summary += description;
     }
     
+    // Generate PDF if needed
+    const pdfPath = await generatePDF(summary);
+    
     return {
       summary,
-      pdfPath: null,
+      pdfPath,
       method: 'api'
     };
   } catch (error) {
@@ -190,6 +118,65 @@ async function downloadAudio(youtubeUrl) {
     return audioPath;
   } catch (error) {
     console.error("Error downloading audio:", error);
+    throw error;
+  }
+}
+
+export async function summarizeText(text) {
+  try {
+    console.log("Starting summarization with Gemini...");
+    console.log("Text to summarize:", text);
+    
+    const generationConfig = {
+      temperature: 1,
+      topP: 0.95,
+      topK: 40,
+      maxOutputTokens: 8192,
+    };
+
+    const model = genAI.getGenerativeModel({
+      model: "gemini-1.5-flash-8b",
+      generationConfig,
+    });
+
+    const chat = model.startChat({
+      history: [],
+    });
+
+    const prompt = `Please summarize the following text in Hebrew, using bullet points:
+    
+    ${text}
+    
+    Please make the summary concise and clear, focusing on the main points.`;
+
+    const result = await chat.sendMessage(prompt);
+    console.log("Summarization completed! Result:", result.response.text);
+    return result.response.text;  // Make sure we're returning the text property
+  } catch (error) {
+    console.error("Error summarizing text:", error);
+    throw error;
+  }
+}
+
+async function processYouTubeVideo(youtubeUrl) {
+  try {
+    // ... rest of the code ...
+    
+    const summary = await summarizeText(transcription);
+    console.log("Got summary:", summary);
+    
+    // Add check for summary format
+    if (!summary || typeof summary !== 'string' || summary.trim().length === 0) {
+      console.error('Invalid summary format:', summary);
+      throw new Error('לא נמצא סיכום');
+    }
+    
+    const pdfPath = path.join(tempDir, 'summary.pdf');
+    await createSummaryPDF(summary, pdfPath);
+    
+    // ... rest of the code ...
+  } catch (error) {
+    console.error("Error processing video:", error);
     throw error;
   }
 }
