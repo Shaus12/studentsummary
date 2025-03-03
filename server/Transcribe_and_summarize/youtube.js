@@ -46,10 +46,10 @@ export async function downloadYouTubeAudio(youtubeUrl, outputPath) {
     console.log(`Video ID: ${videoId}`);
     
     // Use yt-dlp to download audio
-    const command = `yt-dlp -x --audio-format mp3 --audio-quality 0 -o "${outputPath}" ${youtubeUrl}`;
-    console.log(`Executing command: ${command}`);
+    const cmd = `yt-dlp -x --audio-format mp3 --audio-quality 0 --cookies-from-browser chrome -o "${outputPath}" ${youtubeUrl}`;
+    console.log('Running command:', cmd);
     
-    const { stdout, stderr } = await execAsync(command);
+    const { stdout, stderr } = await execAsync(cmd);
     console.log('Download stdout:', stdout);
     
     if (stderr) {
@@ -84,6 +84,10 @@ export async function getYouTubeTranscript(videoId) {
     }
     
     const apiKey = process.env.YOUTUBE_API_KEY;
+    if (!apiKey) {
+      console.error('YouTube API key is missing. Please set YOUTUBE_API_KEY in your environment variables.');
+      throw new Error('YouTube API key is missing');
+    }
     
     // First, check if captions are available
     const captionsResponse = await axios.get(
