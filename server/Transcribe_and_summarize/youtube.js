@@ -7,6 +7,7 @@ import { promisify } from 'util';
 import { transcribeAudio } from './audio.js';
 import { summarizeText, cleanupFile } from './utils.js';
 import { YoutubeTranscript } from 'youtube-transcript';
+import { getSubtitles } from 'youtube-caption-scraper';
 
 const execAsync = promisify(exec);
 const __filename = fileURLToPath(import.meta.url);
@@ -94,7 +95,7 @@ const getYouTubeTranscript = async (videoId) => {
     const transcriptItems = await YoutubeTranscript.fetchTranscript(videoId, options);
     
     if (!transcriptItems || transcriptItems.length === 0) {
-      throw new Error('No transcript available');
+      throw new Error('No transcript available from youtube-transcript-api');
     }
     
     // Combine all transcript items into a single text
@@ -103,29 +104,49 @@ const getYouTubeTranscript = async (videoId) => {
   } catch (error) {
     console.log(`Error with youtube-transcript-api: ${error.message}`);
     
-    // Try fallback method using YouTube API for video info
-    console.log(`Getting video info for video ID: ${videoId} via API`);
+    // Try youtube-caption-scraper as a second method
+    console.log(`Attempting to get captions using youtube-caption-scraper for video ID: ${videoId}`);
     try {
-      const apiKey = process.env.YOUTUBE_API_KEY;
-      console.log(`Using YouTube API Key: ${apiKey ? apiKey.substring(0, 5) + '...' : 'undefined'}`);
+      const subtitles = await getSubtitles({
+        videoID: videoId,
+        lang: 'he'  // Try Hebrew first
+      });
       
-      // Get video information to check if it exists and is accessible
-      const videoResponse = await axios.get(
-        `https://www.googleapis.com/youtube/v3/videos?part=snippet&id=${videoId}&key=${apiKey}`
-      );
-      
-      if (!videoResponse.data.items || videoResponse.data.items.length === 0) {
-        throw new Error('Video not found or not accessible');
+      if (!subtitles || subtitles.length === 0) {
+        throw new Error('No captions available from youtube-caption-scraper');
       }
       
-      // If we can access the video but not the transcript, inform the user
-      const videoTitle = videoResponse.data.items[0].snippet.title;
-      console.log(`Found video: "${videoTitle}" but could not access transcript`);
+      // Combine all subtitle items into a single text
+      const fullTranscript = subtitles.map(item => item.text).join(' ');
+      console.log(`Successfully retrieved captions using youtube-caption-scraper`);
+      return fullTranscript;
+    } catch (captionError) {
+      console.log(`Error with youtube-caption-scraper: ${captionError.message}`);
       
-      throw new Error(`No transcript available for video: "${videoTitle}"`);
-    } catch (apiError) {
-      console.log(`Error with YouTube API: ${apiError.message}`);
-      throw new Error('Failed to get transcript');
+      // Try fallback method using YouTube API for video info
+      console.log(`Getting video info for video ID: ${videoId} via API`);
+      try {
+        const apiKey = process.env.YOUTUBE_API_KEY;
+        console.log(`Using YouTube API Key: ${apiKey ? apiKey.substring(0, 5) + '...' : 'undefined'}`);
+        
+        // Get video information to check if it exists and is accessible
+        const videoResponse = await axios.get(
+          `https://www.googleapis.com/youtube/v3/videos?part=snippet&id=${videoId}&key=${apiKey}`
+        );
+        
+        if (!videoResponse.data.items || videoResponse.data.items.length === 0) {
+          throw new Error('Video not found or not accessible');
+        }
+        
+        // If we can access the video but not the transcript, inform the user
+        const videoTitle = videoResponse.data.items[0].snippet.title;
+        console.log(`Found video: "${videoTitle}" but could not access transcript`);
+        
+        throw new Error(`No transcript available for video: "${videoTitle}"`);
+      } catch (apiError) {
+        console.log(`Error with YouTube API: ${apiError.message}`);
+        throw new Error('Failed to get transcript');
+      }
     }
   }
 };
