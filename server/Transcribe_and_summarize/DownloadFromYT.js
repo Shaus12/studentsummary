@@ -3,10 +3,14 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import { exec } from 'child_process';
 import { promisify } from 'util';
+import { getYouTubeTranscript } from './YouTubeTranscript.js';
 
-const execAsync = promisify(exec);
+const execPromise = promisify(exec);
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
+
+// Define tempDir
+const tempDir = path.join(process.cwd(), 'temp');
 
 async function downloadAudio(youtubeUrl) {
   try {
@@ -18,7 +22,7 @@ async function downloadAudio(youtubeUrl) {
     const command = `yt-dlp -x --audio-format mp3 --audio-quality 0 -o "${outputPath}" "${youtubeUrl}"`;
     
     console.log('Running command:', command);
-    const { stdout, stderr } = await execAsync(command);
+    const { stdout, stderr } = await execPromise(command);
     
     if (stderr) {
       console.error('yt-dlp stderr:', stderr);
@@ -36,6 +40,20 @@ async function downloadAudio(youtubeUrl) {
     console.error('Error downloading audio:', error);
     throw error;
   }
+}
+
+function extractVideoId(url) {
+  if (!url) return null;
+  
+  // Regular expression to extract video ID from various YouTube URL formats
+  const regExp = /^.*(youtu.be\/|v\/|e\/|u\/\w+\/|embed\/|v=)([^#\&\?]*).*/;
+  const match = url.match(regExp);
+  
+  if (match && match[2].length === 11) {
+    return match[2];
+  }
+  
+  return null;
 }
 
 export async function downloadYouTubeAudio(youtubeUrl) {
@@ -70,7 +88,7 @@ export async function downloadYouTubeAudio(youtubeUrl) {
       // Create a more robust yt-dlp command with additional options
       const command = `yt-dlp -x --audio-format mp3 --audio-quality 0 --no-check-certificate --force-ipv4 --geo-bypass --cookies ${path.join(__dirname, '../cookies.txt')} --user-agent "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36" -o "${outputPath}" "${youtubeUrl}"`;
       
-      await execAsync(command);
+      await execPromise(command);
       console.log('Audio downloaded successfully');
       
       return { audioPath: outputPath, method: 'download' };
