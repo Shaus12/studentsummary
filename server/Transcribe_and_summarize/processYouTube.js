@@ -149,18 +149,7 @@ export async function processYouTube(youtubeUrl, outputType = 'summary', options
     };
   } catch (error) {
     console.error('Error in processYouTube:', error);
-    
-    // Return a fallback summary in case of any error
-    const language = options?.language || 'en';
-    const errorMessage = language === 'he'
-      ? `לא ניתן לעבד את סרטון היוטיוב הזה בגלל שגיאה: ${error.message}. אנא נסה סרטון אחר.`
-      : `Unable to process this YouTube video due to an error: ${error.message}. Please try another video.`;
-    
-    return {
-      summary: errorMessage,
-      pdfPath: null,
-      method: 'error'
-    };
+    throw error;
   }
 }
 
