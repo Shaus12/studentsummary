@@ -220,4 +220,10 @@ export async function processYouTube(url, outputType = 'summary', options = {}) 
     console.error("Error processing YouTube video:", error);
     throw error;
   }
-} 
+}
+
+// Export the functions
+export {
+  processYouTube,
+  downloadYouTubeAudio
+}; 
