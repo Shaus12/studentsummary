@@ -401,6 +401,199 @@ const getSupadataTranscript = async (videoId) => {
 };
 
 /**
+ * Downloads audio from YouTube video using a proxy service
+ * @param {string} videoId - YouTube video ID
+ * @returns {Promise<string>} - Path to downloaded audio
+ */
+const downloadYouTubeAudioWithProxy = async (videoId) => {
+  try {
+    console.log(`Attempting to download audio with proxy service for video ID: ${videoId}`);
+    
+    const outputPath = path.join(tempDir, `audio_${Date.now()}.mp3`);
+    
+    // Try using a YouTube to MP3 API service
+    // This is a more reliable approach than scraping
+    try {
+      console.log('Trying YouTube to MP3 API service...');
+      
+      // Using a public YouTube to MP3 API (replace with a more reliable service if needed)
+      const apiUrl = `https://api.vevioz.com/api/button/mp3/${videoId}`;
+      
+      const response = await axios.get(apiUrl, {
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/133.0.0.0 Safari/537.36',
+          'Accept': 'application/json',
+          'Referer': 'https://www.google.com/'
+        }
+      });
+      
+      // Extract the download link from the response
+      const downloadLink = response.data.match(/href="(https:\/\/[^"]+\.mp3)"/);
+      
+      if (downloadLink && downloadLink[1]) {
+        console.log(`Found MP3 download link: ${downloadLink[1]}`);
+        
+        // Download the file
+        const fileResponse = await axios({
+          method: 'GET',
+          url: downloadLink[1],
+          responseType: 'stream',
+          headers: {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/133.0.0.0 Safari/537.36'
+          }
+        });
+        
+        // Save the file
+        const writer = fs.createWriteStream(outputPath);
+        fileResponse.data.pipe(writer);
+        
+        return new Promise((resolve, reject) => {
+          writer.on('finish', () => {
+            console.log(`Audio saved to ${outputPath}`);
+            resolve(outputPath);
+          });
+          writer.on('error', reject);
+        });
+      }
+    } catch (apiError) {
+      console.log(`Error with YouTube to MP3 API: ${apiError.message}`);
+    }
+    
+    // Try using a different proxy service
+    try {
+      console.log('Trying alternative proxy service...');
+      
+      // Using y2mate API (another popular YouTube downloader)
+      const browser = await puppeteer.launch({
+        headless: true,
+        args: [
+          '--no-sandbox',
+          '--disable-setuid-sandbox',
+          '--disable-web-security',
+          '--disable-features=IsolateOrigins,site-per-process'
+        ]
+      });
+      
+      try {
+        const page = await browser.newPage();
+        
+        // Set a realistic user agent
+        await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/133.0.0.0 Safari/537.36');
+        
+        // Navigate to y2mate
+        await page.goto(`https://www.y2mate.com/youtube/${videoId}`, { 
+          waitUntil: 'networkidle2',
+          timeout: 60000 
+        });
+        
+        // Click the convert button
+        await page.waitForSelector('#btn-submit', { timeout: 30000 });
+        await page.click('#btn-submit');
+        
+        // Wait for the download link to appear
+        await page.waitForSelector('.btn-file', { timeout: 60000 });
+        
+        // Get the download link
+        const downloadUrl = await page.evaluate(() => {
+          const downloadBtn = document.querySelector('.btn-file');
+          return downloadBtn ? downloadBtn.href : null;
+        });
+        
+        if (downloadUrl) {
+          console.log(`Found download URL: ${downloadUrl}`);
+          
+          // Download the file
+          const response = await axios({
+            method: 'GET',
+            url: downloadUrl,
+            responseType: 'stream',
+            headers: {
+              'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/133.0.0.0 Safari/537.36'
+            }
+          });
+          
+          // Save the file
+          const writer = fs.createWriteStream(outputPath);
+          response.data.pipe(writer);
+          
+          return new Promise((resolve, reject) => {
+            writer.on('finish', () => {
+              console.log(`Audio saved to ${outputPath}`);
+              resolve(outputPath);
+            });
+            writer.on('error', reject);
+          });
+        }
+      } finally {
+        await browser.close();
+      }
+    } catch (proxyError) {
+      console.log(`Error with alternative proxy service: ${proxyError.message}`);
+    }
+    
+    // As a last resort, try using a public YouTube frontend
+    try {
+      console.log('Trying public YouTube frontend...');
+      
+      // Using Invidious (a YouTube frontend)
+      const invidious = 'https://invidious.fdn.fr/watch?v=' + videoId;
+      
+      const browser = await puppeteer.launch({
+        headless: true,
+        args: [
+          '--no-sandbox',
+          '--disable-setuid-sandbox'
+        ]
+      });
+      
+      try {
+        const page = await browser.newPage();
+        await page.goto(invidious, { waitUntil: 'networkidle2', timeout: 60000 });
+        
+        // Look for the audio download link
+        const audioLink = await page.evaluate(() => {
+          const links = Array.from(document.querySelectorAll('a'));
+          const audioLink = links.find(a => a.textContent.includes('audio') || a.href.includes('audio'));
+          return audioLink ? audioLink.href : null;
+        });
+        
+        if (audioLink) {
+          console.log(`Found audio link: ${audioLink}`);
+          
+          // Download the file
+          const response = await axios({
+            method: 'GET',
+            url: audioLink,
+            responseType: 'stream'
+          });
+          
+          // Save the file
+          const writer = fs.createWriteStream(outputPath);
+          response.data.pipe(writer);
+          
+          return new Promise((resolve, reject) => {
+            writer.on('finish', () => {
+              console.log(`Audio saved to ${outputPath}`);
+              resolve(outputPath);
+            });
+            writer.on('error', reject);
+          });
+        }
+      } finally {
+        await browser.close();
+      }
+    } catch (invidiousError) {
+      console.log(`Error with Invidious: ${invidiousError.message}`);
+    }
+    
+    throw new Error('All proxy methods failed to download the audio');
+  } catch (error) {
+    console.error('Error downloading YouTube audio with proxy:', error);
+    throw error;
+  }
+};
+
+/**
  * Processes YouTube video
  * @param {string} url - YouTube URL
  * @param {string} outputType - Output type (summary or pdf)
@@ -531,5 +724,6 @@ export {
   processYouTube,
   downloadYouTubeAudio,
   downloadYouTubeAudioWithPuppeteer,
+  downloadYouTubeAudioWithProxy,
   getSupadataTranscript
 }; 
