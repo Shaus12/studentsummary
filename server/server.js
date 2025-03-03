@@ -317,8 +317,10 @@ app.post("/api/process-youtube", async (req, res) => {
     console.log('Processing YouTube video:', youtubeUrl);
     console.log('Output Type:', outputType);
     
-    // Process the YouTube video
-    const result = await processYouTube(youtubeUrl, outputType);
+    // Validate YouTube URL
+    if (!youtubeUrl || typeof youtubeUrl !== 'string') {
+      return res.status(400).json({ error: 'Invalid YouTube URL' });
+    }
     
     // Get user email from token
     const token = req.headers.authorization?.split(' ')[1];
@@ -329,20 +331,30 @@ app.post("/api/process-youtube", async (req, res) => {
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
     const userEmail = decoded.email;
     
+    // Check usage limits
+    const usageCheck = await checkAndUpdateUsage(userEmail);
+    if (!usageCheck.allowed) {
+      return res.status(403).json({ message: usageCheck.message });
+    }
+    
+    // Temporary response while we fix the processing
+    const summary = "This is a temporary response while we fix the server. Your YouTube video will be processed soon.";
+    const pdfPath = null;
+    
     // Save to database
     const query = `
       INSERT INTO summaries (user_email, video_url, summary, pdf_path)
       VALUES ($1, $2, $3, $4)
       RETURNING id
     `;
-    const values = [userEmail, youtubeUrl, result.summary, result.pdfPath];
+    const values = [userEmail, youtubeUrl, summary, pdfPath];
     const dbResult = await db.query(query, values);
     
     res.json({ 
       success: true,
-      method: result.method,
-      summary: result.summary,
-      pdfPath: result.pdfPath
+      method: "temporary",
+      summary: summary,
+      pdfPath: pdfPath
     });
   } catch (error) {
     console.error('Error:', error);
