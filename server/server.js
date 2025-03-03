@@ -530,6 +530,67 @@ app.get('/api/db-test', async (req, res) => {
   }
 });
 
+// Add this new endpoint
+app.post("/api/youtube-summary", async (req, res) => {
+  try {
+    console.log('YouTube summary request received');
+    console.log('Full request body:', JSON.stringify(req.body));
+    
+    const youtubeUrl = req.body.youtubeUrl;
+    console.log('YouTube URL:', youtubeUrl);
+    
+    // Validate YouTube URL
+    if (!youtubeUrl || typeof youtubeUrl !== 'string') {
+      console.error('Invalid YouTube URL:', youtubeUrl);
+      return res.status(400).json({ error: 'Invalid YouTube URL. Please provide a valid YouTube URL.' });
+    }
+    
+    // Get user email from token
+    const token = req.headers.authorization?.split(' ')[1];
+    if (!token) {
+      console.error('No authorization token provided');
+      return res.status(401).json({ error: 'No authorization token provided' });
+    }
+    
+    try {
+      const decoded = jwt.verify(token, process.env.JWT_SECRET);
+      const userEmail = decoded.email;
+      
+      // Check usage limits
+      const usageCheck = await checkAndUpdateUsage(userEmail);
+      if (!usageCheck.allowed) {
+        return res.status(403).json({ message: usageCheck.message });
+      }
+      
+      // Generate a simple summary
+      const summary = `This is a temporary summary for the YouTube video: ${youtubeUrl}. We are working on improving our processing capabilities.`;
+      
+      // Save to database
+      console.log('Saving to database...');
+      const query = `
+        INSERT INTO summaries (user_email, video_url, summary, pdf_path)
+        VALUES ($1, $2, $3, $4)
+        RETURNING id
+      `;
+      const values = [userEmail, youtubeUrl, summary, null];
+      const dbResult = await db.query(query, values);
+      console.log('Saved to database successfully');
+      
+      res.json({ 
+        success: true,
+        summary: summary,
+        pdfPath: null
+      });
+    } catch (error) {
+      console.error('Error processing request:', error);
+      res.status(500).json({ error: 'Error processing video: ' + error.message });
+    }
+  } catch (error) {
+    console.error('Error in youtube-summary endpoint:', error);
+    res.status(400).json({ error: 'Error processing video: ' + error.message });
+  }
+});
+
 app.listen(PORT, '0.0.0.0', () => {
   console.log(`Server running on port ${PORT}`);
 });

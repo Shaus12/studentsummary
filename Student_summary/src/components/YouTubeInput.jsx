@@ -19,7 +19,7 @@ function YouTubeInput() {
 
     try {
       const token = localStorage.getItem('token');
-      const response = await fetch('http://localhost:5001/api/process-youtube', {
+      const response = await fetch('http://localhost:5001/api/youtube-summary', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
