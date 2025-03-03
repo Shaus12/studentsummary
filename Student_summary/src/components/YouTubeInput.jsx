@@ -18,8 +18,9 @@ function YouTubeInput() {
     setSuccess(false);
 
     try {
+      console.log('Sending request with URL:', url);
       const token = localStorage.getItem('token');
-      const response = await fetch('http://localhost:5001/api/youtube-summary', {
+      const response = await fetch('http://localhost:5001/api/test-youtube', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -28,7 +29,9 @@ function YouTubeInput() {
         body: JSON.stringify({ youtubeUrl: url })
       });
 
+      console.log('Response status:', response.status);
       const data = await response.json();
+      console.log('Response data:', data);
 
       if (response.ok) {
         setSuccess(true);

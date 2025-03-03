@@ -562,6 +562,25 @@ app.post("/api/youtube-summary", async (req, res) => {
   }
 });
 
+// Add a simple test endpoint
+app.post("/api/test-youtube", async (req, res) => {
+  try {
+    console.log('Test YouTube endpoint called');
+    console.log('Headers:', req.headers);
+    console.log('Body:', req.body);
+    
+    // Return a success response regardless of the input
+    res.json({ 
+      success: true,
+      message: "Test endpoint successful",
+      receivedData: req.body
+    });
+  } catch (error) {
+    console.error('Error in test endpoint:', error);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
 app.listen(PORT, '0.0.0.0', () => {
   console.log(`Server running on port ${PORT}`);
 });
