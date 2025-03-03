@@ -7,6 +7,11 @@ import { promisify } from 'util';
 import { transcribeAudio } from './audio.js';
 import { summarizeText, cleanupFile } from './utils.js';
 import { YoutubeTranscript } from 'youtube-transcript';
+import puppeteer from 'puppeteer-extra';
+import StealthPlugin from 'puppeteer-extra-plugin-stealth';
+
+// Add stealth plugin to puppeteer
+puppeteer.use(StealthPlugin());
 
 const execAsync = promisify(exec);
 const __filename = fileURLToPath(import.meta.url);
@@ -31,74 +36,88 @@ const extractVideoId = (url) => {
 };
 
 /**
- * Downloads audio from YouTube video
+ * Downloads audio from YouTube video using Puppeteer
  * @param {string} videoId - YouTube video ID
  * @returns {Promise<string>} - Path to downloaded audio
  */
-const downloadYouTubeAudio = async (videoId) => {
+const downloadYouTubeAudioWithPuppeteer = async (videoId) => {
   try {
-    console.log(`Downloading audio from: https://www.youtube.com/watch?v=${videoId}`);
-    console.log(`Video ID: ${videoId}`);
+    console.log(`Attempting to download audio with Puppeteer for video ID: ${videoId}`);
     
     const outputPath = path.join(tempDir, `audio_${Date.now()}.mp3`);
+    const videoUrl = `https://www.youtube.com/watch?v=${videoId}`;
     
-    // Try with advanced options first
+    // Launch browser with stealth mode
+    const browser = await puppeteer.launch({
+      headless: true,
+      args: [
+        '--no-sandbox',
+        '--disable-setuid-sandbox',
+        '--disable-web-security',
+        '--disable-features=IsolateOrigins,site-per-process'
+      ]
+    });
+    
     try {
-      // This command uses multiple techniques to bypass restrictions
-      const command = `yt-dlp -x --audio-format mp3 --audio-quality 0 --extractor-args "youtube:player_client=android,web" --user-agent "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/133.0.0.0 Safari/537.36" --add-header "Accept-Language: en-US,en;q=0.9" --sleep-interval 1 --max-sleep-interval 5 --geo-bypass-country US -o "${outputPath}" https://www.youtube.com/watch?v=${videoId}`;
+      const page = await browser.newPage();
       
-      console.log(`Running command with advanced options: ${command}`);
+      // Set a realistic user agent
+      await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/133.0.0.0 Safari/537.36');
       
-      const { stdout } = await execAsync(command);
-      console.log(`YouTube download output: ${stdout}`);
-      return outputPath;
-    } catch (advancedError) {
-      console.log("Error with advanced options, trying alternative approach...");
-      console.log(advancedError.message);
+      // Set extra headers to appear more like a real browser
+      await page.setExtraHTTPHeaders({
+        'Accept-Language': 'en-US,en;q=0.9',
+        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,image/apng,*/*;q=0.8',
+        'Accept-Encoding': 'gzip, deflate, br'
+      });
       
-      // Try with cookies from browser
-      try {
-        // Try with a different player client
-        const command = `yt-dlp -x --audio-format mp3 --audio-quality 0 --cookies-from-browser chrome --extractor-args "youtube:player_client=ios" --geo-bypass -o "${outputPath}" https://www.youtube.com/watch?v=${videoId}`;
-        console.log(`Running command with cookies: ${command}`);
-        
-        const { stdout } = await execAsync(command);
-        console.log(`YouTube download output: ${stdout}`);
-        return outputPath;
-      } catch (cookiesError) {
-        console.log("Error with cookies method, trying third approach...");
-        
-        // Try with embed page approach
-        try {
-          const command = `yt-dlp -x --audio-format mp3 --audio-quality 0 --referer "https://www.google.com/" --add-header "Origin:https://www.youtube.com" --embed-metadata --no-check-certificate --force-ipv4 -o "${outputPath}" https://www.youtube.com/embed/${videoId}`;
-          console.log(`Running embed approach: ${command}`);
-          
-          const { stdout } = await execAsync(command);
-          console.log(`YouTube download output: ${stdout}`);
-          return outputPath;
-        } catch (embedError) {
-          console.log("Error with embed approach, trying final method...");
-          
-          // Last resort: try with invidious
-          try {
-            const command = `yt-dlp -x --audio-format mp3 --audio-quality 0 -o "${outputPath}" https://invidious.snopyta.org/watch?v=${videoId}`;
-            console.log(`Running invidious approach: ${command}`);
-            
-            const { stdout } = await execAsync(command);
-            console.log(`YouTube download output: ${stdout}`);
-            return outputPath;
-          } catch (invidiousError) {
-            if (invidiousError.stderr && invidiousError.stderr.includes("Sign in to confirm you're not a bot")) {
-              throw new Error("YouTube is requiring authentication to access this video. Please try a different video or try again later.");
-            } else {
-              throw invidiousError;
-            }
-          }
-        }
+      // Navigate to the video page
+      console.log(`Navigating to ${videoUrl}`);
+      await page.goto(videoUrl, { waitUntil: 'networkidle2', timeout: 60000 });
+      
+      // Wait for the video player to load
+      await page.waitForSelector('video', { timeout: 30000 });
+      
+      // Get the audio URL from the video element
+      const audioUrl = await page.evaluate(() => {
+        const videoElement = document.querySelector('video');
+        return videoElement ? videoElement.src : null;
+      });
+      
+      if (!audioUrl) {
+        throw new Error('Could not extract audio URL from the video page');
       }
+      
+      console.log(`Extracted audio URL: ${audioUrl}`);
+      
+      // Download the audio file
+      const response = await axios({
+        method: 'GET',
+        url: audioUrl,
+        responseType: 'stream',
+        headers: {
+          'Referer': videoUrl,
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/133.0.0.0 Safari/537.36'
+        }
+      });
+      
+      // Save the audio file
+      const writer = fs.createWriteStream(outputPath);
+      response.data.pipe(writer);
+      
+      return new Promise((resolve, reject) => {
+        writer.on('finish', () => {
+          console.log(`Audio saved to ${outputPath}`);
+          resolve(outputPath);
+        });
+        writer.on('error', reject);
+      });
+    } finally {
+      // Always close the browser
+      await browser.close();
     }
   } catch (error) {
-    console.error("Error downloading YouTube audio:", error);
+    console.error('Error downloading YouTube audio with Puppeteer:', error);
     throw error;
   }
 };
@@ -208,10 +227,17 @@ const processYouTube = async (youtubeUrl, outputType = 'summary', options = {}) 
       console.log('No transcript available, attempting to download audio...');
       
       try {
-        const audioPath = await downloadYouTubeAudio(videoId);
+        // Try with yt-dlp first
+        let audioPath;
+        try {
+          audioPath = await downloadYouTubeAudio(videoId);
+        } catch (ytdlpError) {
+          console.log('Error with yt-dlp, trying Puppeteer approach...');
+          audioPath = await downloadYouTubeAudioWithPuppeteer(videoId);
+        }
         
         // Here you would call your transcription function
-        // transcription = await transcribeAudio(audioPath);
+        transcription = await transcribeAudio(audioPath);
         
         // Clean up the audio file
         try {
@@ -254,5 +280,6 @@ export {
   getYouTubeTranscript,
   getVideoInfo,
   processYouTube,
-  downloadYouTubeAudio
+  downloadYouTubeAudio,
+  downloadYouTubeAudioWithPuppeteer
 }; 
