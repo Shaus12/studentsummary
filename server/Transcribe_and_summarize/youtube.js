@@ -168,6 +168,7 @@ const processYouTube = async (youtubeUrl, outputType = 'summary', options = {}) 
     let transcription;
     try {
       transcription = await getYouTubeTranscript(videoId);
+      console.log("Successfully retrieved transcript");
     } catch (transcriptError) {
       console.log('Falling back to audio transcription...');
       console.log('No transcript available, attempting to download audio...');
@@ -185,9 +186,18 @@ const processYouTube = async (youtubeUrl, outputType = 'summary', options = {}) 
           console.error('Error cleaning up audio file:', cleanupError);
         }
       } catch (downloadError) {
-        console.error("Error downloading or transcribing audio:", downloadError);
-        throw downloadError;
+        if (downloadError.message.includes("YouTube is requiring authentication")) {
+          throw new Error("YouTube is requiring authentication to access this video. Please try a different video or try again later.");
+        } else {
+          console.error("Error downloading or transcribing audio:", downloadError);
+          throw new Error("Failed to process YouTube video. YouTube may be blocking automated access. Please try a different video or try again later.");
+        }
       }
+    }
+    
+    // If we don't have a transcription at this point, we need to inform the user
+    if (!transcription) {
+      throw new Error("Could not retrieve or generate a transcript for this video. Please try a different video.");
     }
     
     // Process the transcription based on output type
@@ -200,7 +210,7 @@ const processYouTube = async (youtubeUrl, outputType = 'summary', options = {}) 
     }
   } catch (error) {
     console.error("Error processing YouTube video:", error);
-    throw new Error("Failed to process YouTube video: " + error.message);
+    throw error; // Pass the error directly to maintain the user-friendly message
   }
 };
 
