@@ -1,5 +1,5 @@
 // Export all functionality from a single entry point
-export { summarizeText } from './utils.js';
+export { summarizeText, ensureDirectoryExists, cleanupFile } from './utils.js';
 export { transcribeAudio, processUploadedFile } from './audio.js';
 export { generatePDF } from './pdf.js';
 export { 

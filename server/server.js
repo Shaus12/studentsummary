@@ -347,9 +347,271 @@ app.post("/api/process-youtube", async (req, res) => {
     // Get summary options from request
     const summaryOptions = req.body.summaryOptions || {};
     
-    // Generate a temporary summary
-    const summary = `Processing YouTube video: ${youtubeUrl}. Please wait...`;
-    const pdfPath = null;
+    // Check if user is allowed to process videos
+    const usageCheck = await checkAndUpdateUsage(userEmail);
+    if (!usageCheck.allowed) {
+      return res.status(403).json({ error: 'Usage limit exceeded' });
+    }
     
-    console.log('Saving to database...');
-    const query = `
+    // Process the YouTube video
+    const result = await processYouTube(youtubeUrl, outputType, summaryOptions);
+    
+    // Save the result to the database
+    const insertResult = await db.query(
+      `INSERT INTO summaries (user_email, youtube_url, summary, pdf_path, created_at)
+       VALUES ($1, $2, $3, $4, NOW())
+       RETURNING id`,
+      [userEmail, youtubeUrl, result.summary, result.pdfPath]
+    );
+    
+    const summaryId = insertResult.rows[0].id;
+    
+    // Return the result
+    res.json({
+      id: summaryId,
+      summary: result.summary,
+      pdfPath: result.pdfPath ? `/files/${path.basename(result.pdfPath)}` : null,
+      method: result.method
+    });
+  } catch (error) {
+    console.error('Error processing YouTube video:', error);
+    res.status(500).json({ 
+      error: 'Error processing YouTube video', 
+      details: error.message 
+    });
+  }
+});
+
+app.post('/api/upload-audio', upload.single('audio'), async (req, res) => {
+  try {
+    console.log('Audio upload request received');
+    
+    if (!req.file) {
+      return res.status(400).json({ error: 'No audio file uploaded' });
+    }
+    
+    console.log('File uploaded:', req.file);
+    
+    // Get user email from token
+    const token = req.headers.authorization?.split(' ')[1];
+    if (!token) {
+      return res.status(401).json({ error: 'No authorization token provided' });
+    }
+    
+    let userEmail;
+    try {
+      const decoded = jwt.verify(token, process.env.JWT_SECRET);
+      userEmail = decoded.email;
+    } catch (error) {
+      return res.status(401).json({ error: 'Invalid token' });
+    }
+    
+    // Get output type from request
+    const outputType = req.body.outputType || 'summary';
+    
+    // Check if user is allowed to process audio
+    const usageCheck = await checkAndUpdateUsage(userEmail);
+    if (!usageCheck.allowed) {
+      // Clean up the uploaded file
+      await unlink(req.file.path);
+      return res.status(403).json({ error: 'Usage limit exceeded' });
+    }
+    
+    // Process the uploaded file
+    const result = await processUploadedFile(req.file.path, outputType);
+    
+    // Clean up the uploaded file
+    await unlink(req.file.path);
+    
+    // Save the result to the database
+    const insertResult = await db.query(
+      `INSERT INTO summaries (user_email, file_name, summary, pdf_path, created_at)
+       VALUES ($1, $2, $3, $4, NOW())
+       RETURNING id`,
+      [userEmail, req.file.originalname, result.summary, result.pdfPath]
+    );
+    
+    const summaryId = insertResult.rows[0].id;
+    
+    // Return the result
+    res.json({
+      id: summaryId,
+      summary: result.summary,
+      pdfPath: result.pdfPath ? `/files/${path.basename(result.pdfPath)}` : null
+    });
+  } catch (error) {
+    console.error('Error processing audio file:', error);
+    
+    // Clean up the uploaded file if it exists
+    if (req.file) {
+      try {
+        await unlink(req.file.path);
+      } catch (unlinkError) {
+        console.error('Error deleting uploaded file:', unlinkError);
+      }
+    }
+    
+    res.status(500).json({ 
+      error: 'Error processing audio file', 
+      details: error.message 
+    });
+  }
+});
+
+app.get('/api/summaries', async (req, res) => {
+  try {
+    // Get user email from token
+    const token = req.headers.authorization?.split(' ')[1];
+    if (!token) {
+      return res.status(401).json({ error: 'No authorization token provided' });
+    }
+    
+    let userEmail;
+    try {
+      const decoded = jwt.verify(token, process.env.JWT_SECRET);
+      userEmail = decoded.email;
+    } catch (error) {
+      return res.status(401).json({ error: 'Invalid token' });
+    }
+    
+    // Get summaries for the user
+    const result = await db.query(
+      `SELECT id, youtube_url, file_name, summary, pdf_path, created_at
+       FROM summaries
+       WHERE user_email = $1
+       ORDER BY created_at DESC`,
+      [userEmail]
+    );
+    
+    // Format the results
+    const summaries = result.rows.map(row => ({
+      id: row.id,
+      source: row.youtube_url || row.file_name,
+      summary: row.summary,
+      pdfPath: row.pdf_path ? `/files/${path.basename(row.pdf_path)}` : null,
+      createdAt: row.created_at
+    }));
+    
+    res.json(summaries);
+  } catch (error) {
+    console.error('Error getting summaries:', error);
+    res.status(500).json({ 
+      error: 'Error getting summaries', 
+      details: error.message 
+    });
+  }
+});
+
+app.get('/api/summary/:id', async (req, res) => {
+  try {
+    const summaryId = req.params.id;
+    
+    // Get user email from token
+    const token = req.headers.authorization?.split(' ')[1];
+    if (!token) {
+      return res.status(401).json({ error: 'No authorization token provided' });
+    }
+    
+    let userEmail;
+    try {
+      const decoded = jwt.verify(token, process.env.JWT_SECRET);
+      userEmail = decoded.email;
+    } catch (error) {
+      return res.status(401).json({ error: 'Invalid token' });
+    }
+    
+    // Get the summary
+    const result = await db.query(
+      `SELECT id, youtube_url, file_name, summary, pdf_path, created_at
+       FROM summaries
+       WHERE id = $1 AND user_email = $2`,
+      [summaryId, userEmail]
+    );
+    
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Summary not found' });
+    }
+    
+    const summary = result.rows[0];
+    
+    res.json({
+      id: summary.id,
+      source: summary.youtube_url || summary.file_name,
+      summary: summary.summary,
+      pdfPath: summary.pdf_path ? `/files/${path.basename(summary.pdf_path)}` : null,
+      createdAt: summary.created_at
+    });
+  } catch (error) {
+    console.error('Error getting summary:', error);
+    res.status(500).json({ 
+      error: 'Error getting summary', 
+      details: error.message 
+    });
+  }
+});
+
+app.delete('/api/summary/:id', async (req, res) => {
+  try {
+    const summaryId = req.params.id;
+    
+    // Get user email from token
+    const token = req.headers.authorization?.split(' ')[1];
+    if (!token) {
+      return res.status(401).json({ error: 'No authorization token provided' });
+    }
+    
+    let userEmail;
+    try {
+      const decoded = jwt.verify(token, process.env.JWT_SECRET);
+      userEmail = decoded.email;
+    } catch (error) {
+      return res.status(401).json({ error: 'Invalid token' });
+    }
+    
+    // Get the summary to check if it exists and belongs to the user
+    const checkResult = await db.query(
+      `SELECT id, pdf_path
+       FROM summaries
+       WHERE id = $1 AND user_email = $2`,
+      [summaryId, userEmail]
+    );
+    
+    if (checkResult.rows.length === 0) {
+      return res.status(404).json({ error: 'Summary not found' });
+    }
+    
+    const summary = checkResult.rows[0];
+    
+    // Delete the PDF file if it exists
+    if (summary.pdf_path) {
+      try {
+        await unlink(summary.pdf_path);
+      } catch (unlinkError) {
+        console.error('Error deleting PDF file:', unlinkError);
+      }
+    }
+    
+    // Delete the summary from the database
+    await db.query(
+      `DELETE FROM summaries
+       WHERE id = $1`,
+      [summaryId]
+    );
+    
+    res.json({ message: 'Summary deleted successfully' });
+  } catch (error) {
+    console.error('Error deleting summary:', error);
+    res.status(500).json({ 
+      error: 'Error deleting summary', 
+      details: error.message 
+    });
+  }
+});
+
+// Start the server
+app.listen(PORT, () => {
+  console.log(`Server running on port ${PORT}`);
+  
+  // Set up membership column
+  setupMembershipColumn();
+});
