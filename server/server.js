@@ -608,12 +608,31 @@ app.delete('/api/summary/:id', async (req, res) => {
   }
 });
 
-// Add this route handler to your Express server
+// Add this middleware function to authenticate JWT tokens
+const authenticateToken = (req, res, next) => {
+  const authHeader = req.headers['authorization'];
+  const token = authHeader && authHeader.split(' ')[1];
+  
+  if (!token) {
+    return res.status(401).json({ error: 'Access denied. No token provided.' });
+  }
+  
+  try {
+    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    req.user = decoded;
+    next();
+  } catch (error) {
+    console.error('Token verification error:', error);
+    return res.status(403).json({ error: 'Invalid token.' });
+  }
+};
+
+// Also, fix the pool reference in the usage-status endpoint
 app.get('/api/usage-status', authenticateToken, async (req, res) => {
   try {
     const email = req.user.email;
     
-    // Get the user from the database
+    // Get the user from the database (using db instead of pool)
     const user = await db.query(
       'SELECT membership_type, usage_count FROM users WHERE email = $1',
       [email]
