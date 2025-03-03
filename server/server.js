@@ -7,7 +7,7 @@ import jwt from 'jsonwebtoken';
 import { OAuth2Client } from 'google-auth-library';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import { processYouTube } from './Transcribe_and_summarize/processYT.js';
+import { processYouTube } from './Transcribe_and_summarize/processYouTube.js';
 import { unlink } from 'fs/promises';
 import multer from 'multer';
 import { existsSync, mkdirSync } from 'fs';

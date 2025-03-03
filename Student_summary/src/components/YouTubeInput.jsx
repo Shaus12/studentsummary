@@ -20,13 +20,13 @@ function YouTubeInput() {
     try {
       console.log('Sending request with URL:', url);
       const token = localStorage.getItem('token');
-      const response = await fetch('http://localhost:5001/api/test-youtube', {
+      const response = await fetch('http://localhost:5001/api/process-youtube', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${token}`
         },
-        body: JSON.stringify({ youtubeUrl: url })
+        body: JSON.stringify({ url: url, outputType: 'summary' })
       });
 
       console.log('Response status:', response.status);
