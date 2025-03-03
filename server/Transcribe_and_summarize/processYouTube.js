@@ -151,49 +151,70 @@ async function generatePDF(content) {
 }
 
 // Main function to process YouTube videos
-export async function processYouTube(youtubeUrl, outputType) {
+export async function processYouTube(youtubeUrl, outputType = 'summary') {
   try {
-    console.log(`Processing YouTube video: ${youtubeUrl}`);
+    console.log(`Processing YouTube URL: ${youtubeUrl}`);
     console.log(`Output type: ${outputType}`);
     
-    // Process the YouTube video with our hybrid approach
-    const audioPath = path.join(__dirname, '..', 'temp', 'audio.mp3');
-    const result = await downloadYouTubeAudio(youtubeUrl, audioPath);
+    // Try to get content from YouTube
+    let content;
+    let method;
     
-    let text;
-    
-    if (result.method === 'download') {
-      // If we successfully downloaded the audio, transcribe it
-      console.log('Audio downloaded successfully, transcribing...');
-      text = await transcribeAudio(result.outputPath);
-    } else if (result.method === 'transcript') {
-      // If we used the transcript API, use the transcript directly
-      console.log('Using transcript directly...');
-      text = result.transcript;
+    try {
+      const result = await downloadYouTubeAudio(youtubeUrl);
+      if (result.transcript) {
+        content = result.transcript;
+        method = 'transcript';
+      } else if (result.audioPath) {
+        // Transcribe the audio
+        content = await transcribeAudio(result.audioPath);
+        method = 'audio';
+      }
+    } catch (contentError) {
+      console.error('Error getting content from YouTube:', contentError);
+      
+      // If we can't get content, generate a fallback summary
+      const summary = `Unable to process this YouTube video. The video might be private, age-restricted, or not have captions available. Please try another video.`;
+      
+      return {
+        summary,
+        pdfPath: null,
+        method: 'fallback'
+      };
     }
     
-    console.log(`Text obtained, length: ${text?.length}`);
+    if (!content) {
+      throw new Error('Failed to get content from YouTube video');
+    }
     
-    // Generate summary or notes based on the output type
-    let output;
+    // Generate summary
+    console.log(`Generating ${outputType} from content (length: ${content.length})`);
+    
+    let summary;
+    let pdfPath = null;
+    
     if (outputType === 'summary') {
-      output = await summarizeText(text);
+      summary = await summarizeText(content);
     } else if (outputType === 'notes') {
-      // For now, just use summarizeText for notes as well
-      output = await summarizeText(text);
+      summary = await summarizeText(content);
     } else {
-      output = await summarizeText(text);
+      summary = await summarizeText(content);
     }
     
-    console.log(`Output generated, length: ${output?.length}`);
-    
-    // Generate PDF
-    const pdfPath = await generatePDF(output);
+    // Generate PDF if needed
+    if (summary) {
+      try {
+        pdfPath = await generatePDF(summary);
+      } catch (pdfError) {
+        console.error('Error generating PDF:', pdfError);
+        // Continue without PDF
+      }
+    }
     
     return {
-      method: result.method,
-      summary: output,
-      pdfPath: pdfPath
+      summary,
+      pdfPath,
+      method
     };
   } catch (error) {
     console.error('Error in processYouTube:', error);
