@@ -296,7 +296,7 @@ app.post("/api/process-youtube", async (req, res) => {
     });
     
     // Use let instead of const for youtubeUrl so we can reassign it
-    let youtubeUrl = req.body.youtubeUrl || req.query.youtubeUrl;
+    let youtubeUrl = req.body.youtubeUrl || req.body.url || req.query.youtubeUrl;
     console.log('YouTube URL:', youtubeUrl);
     
     // Check if the URL might be in a different property
@@ -335,8 +335,12 @@ app.post("/api/process-youtube", async (req, res) => {
       return res.status(403).json({ message: usageCheck.message });
     }
     
-    // Generate a simple summary
+    // Get output type from request or use default
+    const outputType = req.body.outputType || 'summary';
+    
+    // For now, return a temporary response
     const summary = `This is a temporary summary for the YouTube video: ${youtubeUrl}. We are working on improving our processing capabilities.`;
+    const pdfPath = null;
     
     // Save to database
     console.log('Saving to database...');
@@ -345,7 +349,7 @@ app.post("/api/process-youtube", async (req, res) => {
       VALUES ($1, $2, $3, $4)
       RETURNING id
     `;
-    const values = [userEmail, youtubeUrl, summary, null];
+    const values = [userEmail, youtubeUrl, summary, pdfPath];
     const dbResult = await db.query(query, values);
     console.log('Saved to database successfully');
     
@@ -353,8 +357,27 @@ app.post("/api/process-youtube", async (req, res) => {
       success: true,
       method: "temporary",
       summary: summary,
-      pdfPath: null
+      pdfPath: pdfPath
     });
+    
+    // Process the YouTube video in the background (don't wait for it)
+    try {
+      console.log('Starting background processing of YouTube video...');
+      processYouTube(youtubeUrl, outputType)
+        .then(result => {
+          console.log('YouTube processing completed successfully');
+          // Update the database with the actual summary and PDF path
+          db.query(
+            'UPDATE summaries SET summary = $1, pdf_path = $2 WHERE id = $3',
+            [result.summary, result.pdfPath, dbResult.rows[0].id]
+          );
+        })
+        .catch(error => {
+          console.error('Error processing YouTube video in background:', error);
+        });
+    } catch (processingError) {
+      console.error('Error starting background processing:', processingError);
+    }
   } catch (error) {
     console.error('Error in process-youtube endpoint:', error);
     res.status(400).json({ error: 'Error processing video: ' + error.message });
