@@ -607,6 +607,66 @@ app.post("/api/test-youtube", async (req, res) => {
   }
 });
 
+// Add a new endpoint to check the status of a summary
+app.get("/api/summary-status", async (req, res) => {
+  try {
+    // Get user email from token
+    const token = req.headers.authorization?.split(' ')[1];
+    if (!token) {
+      console.error('No authorization token provided');
+      return res.status(401).json({ error: 'No authorization token provided' });
+    }
+    
+    let userEmail;
+    try {
+      const decoded = jwt.verify(token, process.env.JWT_SECRET);
+      userEmail = decoded.email;
+    } catch (error) {
+      console.error('Invalid token:', error);
+      return res.status(401).json({ error: 'Invalid token' });
+    }
+    
+    // Get the video URL from the query parameters
+    const videoUrl = req.query.url;
+    if (!videoUrl) {
+      return res.status(400).json({ error: 'Video URL is required' });
+    }
+    
+    console.log(`Checking summary status for video: ${videoUrl}`);
+    
+    // Query the database for the summary
+    const query = `
+      SELECT summary, pdf_path
+      FROM summaries
+      WHERE user_email = $1 AND video_url = $2
+      ORDER BY created_at DESC
+      LIMIT 1
+    `;
+    const values = [userEmail, videoUrl];
+    const result = await db.query(query, values);
+    
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Summary not found' });
+    }
+    
+    const summary = result.rows[0].summary;
+    const pdfPath = result.rows[0].pdf_path;
+    
+    // Check if the summary is still processing
+    const isProcessing = summary.includes('Processing YouTube video') && summary.includes('Please wait');
+    
+    res.json({
+      success: true,
+      isProcessing,
+      summary,
+      pdfPath
+    });
+  } catch (error) {
+    console.error('Error in summary-status endpoint:', error);
+    res.status(500).json({ error: 'Error checking summary status: ' + error.message });
+  }
+});
+
 app.listen(PORT, '0.0.0.0', () => {
   console.log(`Server running on port ${PORT}`);
 });
