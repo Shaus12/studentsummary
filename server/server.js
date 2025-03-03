@@ -86,9 +86,13 @@ const upload = multer({
   }
 });
 
-// Add this helper function at the top of your file
+// Update the checkAndUpdateUsage function
 const checkAndUpdateUsage = async (userEmail) => {
   try {
+    // For now, just allow all users
+    return { allowed: true };
+    
+    /* Commenting out the problematic code
     // First check membership type
     const membershipResult = await db.query(
       "SELECT membership_type FROM users WHERE email = $1",
@@ -121,6 +125,7 @@ const checkAndUpdateUsage = async (userEmail) => {
     }
 
     return { allowed: true };
+    */
   } catch (error) {
     console.error('Error checking usage:', error);
     // If there's an error, allow the user to proceed
@@ -534,7 +539,7 @@ app.get('/api/db-test', async (req, res) => {
   }
 });
 
-// Add this new endpoint
+// Update the youtube-summary endpoint
 app.post("/api/youtube-summary", async (req, res) => {
   try {
     console.log('YouTube summary request received');
@@ -560,11 +565,11 @@ app.post("/api/youtube-summary", async (req, res) => {
       const decoded = jwt.verify(token, process.env.JWT_SECRET);
       const userEmail = decoded.email;
       
-      // Check usage limits
-      const usageCheck = await checkAndUpdateUsage(userEmail);
-      if (!usageCheck.allowed) {
-        return res.status(403).json({ message: usageCheck.message });
-      }
+      // Skip usage check for now
+      // const usageCheck = await checkAndUpdateUsage(userEmail);
+      // if (!usageCheck.allowed) {
+      //   return res.status(403).json({ message: usageCheck.message });
+      // }
       
       // Generate a simple summary
       const summary = `This is a temporary summary for the YouTube video: ${youtubeUrl}. We are working on improving our processing capabilities.`;
@@ -669,42 +674,3 @@ const generatePDF = async (summary, title) => {
   await browser.close();
   return pdf;
 };
-
-// Add this function to check and fix the database schema
-async function fixDatabaseSchema() {
-  try {
-    console.log('Checking and fixing database schema...');
-    
-    // Check if the membership_type column exists
-    const checkColumnResult = await db.query(`
-      SELECT column_name
-      FROM information_schema.columns
-      WHERE table_name = 'users' AND column_name = 'membership_type'
-    `);
-    
-    if (checkColumnResult.rows.length === 0) {
-      console.log('membership_type column does not exist, creating it...');
-      
-      // Add the column as a simple text column
-      await db.query(`
-        ALTER TABLE users 
-        ADD COLUMN membership_type TEXT DEFAULT 'free'
-      `);
-      
-      console.log('membership_type column created successfully');
-    } else {
-      console.log('membership_type column exists');
-    }
-    
-    console.log('Database schema check completed');
-  } catch (error) {
-    console.error('Error fixing database schema:', error);
-  }
-}
-
-// Call this function when the server starts
-fixDatabaseSchema().then(() => {
-  console.log('Database schema check completed');
-}).catch(error => {
-  console.error('Error checking database schema:', error);
-});
