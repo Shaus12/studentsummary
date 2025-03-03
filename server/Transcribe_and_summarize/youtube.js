@@ -95,48 +95,28 @@ const getYouTubeTranscript = async (videoId) => {
   } catch (error) {
     console.log(`Error with youtube-transcript-api: ${error.message}`);
     
-    // Try fallback method using YouTube API
-    console.log(`Getting transcript for video ID: ${videoId} via API (fallback method)`);
+    // Try fallback method using YouTube API for video info
+    console.log(`Getting video info for video ID: ${videoId} via API`);
     try {
       const apiKey = process.env.YOUTUBE_API_KEY;
       console.log(`Using YouTube API Key: ${apiKey ? apiKey.substring(0, 5) + '...' : 'undefined'}`);
       
-      // First, check if the API key is valid by making a simple request
-      try {
-        const testResponse = await axios.get(
-          `https://www.googleapis.com/youtube/v3/videos?part=snippet&id=${videoId}&key=${apiKey}`
-        );
-        console.log(`API key validation successful. Response status: ${testResponse.status}`);
-      } catch (testError) {
-        console.error(`API key validation failed: ${testError.message}`);
-        if (testError.response) {
-          console.error(`Response status: ${testError.response.status}`);
-          console.error(`Response data: ${JSON.stringify(testError.response.data)}`);
-        }
-        throw new Error(`YouTube API key validation failed: ${testError.message}`);
-      }
-      
-      // If we get here, the API key is valid, so try to get captions
-      const captionsResponse = await axios.get(
-        `https://www.googleapis.com/youtube/v3/captions?part=snippet&videoId=${videoId}&key=${apiKey}`
+      // Get video information to check if it exists and is accessible
+      const videoResponse = await axios.get(
+        `https://www.googleapis.com/youtube/v3/videos?part=snippet&id=${videoId}&key=${apiKey}`
       );
       
-      if (!captionsResponse.data.items || captionsResponse.data.items.length === 0) {
-        throw new Error('No captions found for this video');
+      if (!videoResponse.data.items || videoResponse.data.items.length === 0) {
+        throw new Error('Video not found or not accessible');
       }
       
-      const captionId = captionsResponse.data.items[0].id;
-      const transcriptResponse = await axios.get(
-        `https://www.googleapis.com/youtube/v3/captions/${captionId}?key=${apiKey}`
-      );
+      // If we can access the video but not the transcript, inform the user
+      const videoTitle = videoResponse.data.items[0].snippet.title;
+      console.log(`Found video: "${videoTitle}" but could not access transcript`);
       
-      if (!transcriptResponse.data) {
-        throw new Error('No transcript data returned');
-      }
-      
-      return transcriptResponse.data.text || '';
+      throw new Error(`No transcript available for video: "${videoTitle}"`);
     } catch (apiError) {
-      console.log(`Error with YouTube API fallback: ${apiError.message}`);
+      console.log(`Error with YouTube API: ${apiError.message}`);
       throw new Error('Failed to get transcript');
     }
   }
