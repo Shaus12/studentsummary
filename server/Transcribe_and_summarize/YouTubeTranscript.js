@@ -16,48 +16,22 @@ function extractVideoId(url) {
 // Function to get transcript from YouTube video ID
 async function fetchTranscript(videoId) {
   try {
-    // First, get the video page to find available transcripts
-    const videoPageResponse = await axios.get(`https://www.youtube.com/watch?v=${videoId}`);
-    const videoPageHtml = videoPageResponse.data;
+    // Use the YouTube transcript API
+    const response = await fetch(`https://youtubetranscript.com/?server_vid=${videoId}`);
     
-    // Extract the serializedShareEntity which contains the transcript data
-    const match = videoPageHtml.match(/"captionTracks":(\[.*?\]),"audioTracks"/);
-    if (!match || !match[1]) {
+    if (!response.ok) {
+      console.error(`Transcript API returned status: ${response.status}`);
+      throw new Error('Failed to fetch transcript');
+    }
+    
+    const data = await response.json();
+    
+    if (!data || !data.transcript) {
+      console.error('No transcript data returned');
       throw new Error('No captions found for this video');
     }
     
-    // Parse the JSON data
-    const captionTracks = JSON.parse(match[1].replace(/\\"/g, '"'));
-    
-    // Find the English transcript or use the first available one
-    const englishTrack = captionTracks.find(track => track.languageCode === 'en') || captionTracks[0];
-    if (!englishTrack || !englishTrack.baseUrl) {
-      throw new Error('No suitable transcript found');
-    }
-    
-    // Get the transcript data
-    const transcriptResponse = await axios.get(englishTrack.baseUrl);
-    const transcriptXml = transcriptResponse.data;
-    
-    // Parse the XML to extract text
-    const textSegments = [];
-    const regex = /<text[^>]*>(.*?)<\/text>/g;
-    let segmentMatch;
-    while ((segmentMatch = regex.exec(transcriptXml)) !== null) {
-      // Decode HTML entities
-      const text = segmentMatch[1]
-        .replace(/&amp;/g, '&')
-        .replace(/&lt;/g, '<')
-        .replace(/&gt;/g, '>')
-        .replace(/&quot;/g, '"')
-        .replace(/&#39;/g, "'");
-      
-      if (text.trim()) {
-        textSegments.push(text);
-      }
-    }
-    
-    return textSegments.join(' ');
+    return data.transcript;
   } catch (error) {
     console.error('Error fetching transcript:', error);
     throw error;
@@ -65,27 +39,24 @@ async function fetchTranscript(videoId) {
 }
 
 // Main function to process a YouTube video
-export async function getYouTubeTranscript(youtubeUrl) {
+export async function getYouTubeTranscript(videoId) {
   try {
-    const videoId = extractVideoId(youtubeUrl);
-    if (!videoId) {
-      throw new Error('Invalid YouTube URL');
-    }
-
     console.log(`Getting transcript for video ID: ${videoId}`);
     
-    // Get video transcript
+    // Validate video ID
+    if (!videoId || typeof videoId !== 'string' || videoId.length !== 11) {
+      console.error('Invalid video ID:', videoId);
+      throw new Error('Invalid video ID');
+    }
+    
+    // Try to fetch the transcript
     const transcript = await fetchTranscript(videoId);
     
-    // Save transcript to a file
-    const transcriptPath = path.join(__dirname, '..', 'temp', `${videoId}_transcript.txt`);
-    await fs.promises.writeFile(transcriptPath, transcript);
+    if (!transcript) {
+      throw new Error('No transcript available');
+    }
     
-    return {
-      videoId,
-      transcript,
-      transcriptPath
-    };
+    return transcript;
   } catch (error) {
     console.error('Error getting YouTube transcript:', error);
     throw error;

@@ -174,17 +174,22 @@ export async function processYouTube(youtubeUrl, outputType = 'summary') {
       console.error('Error getting content from YouTube:', contentError);
       
       // If we can't get content, generate a fallback summary
-      const summary = `Unable to process this YouTube video. The video might be private, age-restricted, or not have captions available. Please try another video.`;
+      const fallbackSummary = `Unable to process this YouTube video. The video might be private, age-restricted, or not have captions available. Please try another video.`;
       
       return {
-        summary,
+        summary: fallbackSummary,
         pdfPath: null,
         method: 'fallback'
       };
     }
     
     if (!content) {
-      throw new Error('Failed to get content from YouTube video');
+      console.log('No content available, using fallback summary');
+      return {
+        summary: `Unable to process this YouTube video. The video might be private, age-restricted, or not have captions available. Please try another video.`,
+        pdfPath: null,
+        method: 'fallback'
+      };
     }
     
     // Generate summary
@@ -218,6 +223,12 @@ export async function processYouTube(youtubeUrl, outputType = 'summary') {
     };
   } catch (error) {
     console.error('Error in processYouTube:', error);
-    throw error;
+    
+    // Return a fallback summary in case of any error
+    return {
+      summary: `Unable to process this YouTube video due to an error: ${error.message}. Please try another video.`,
+      pdfPath: null,
+      method: 'error'
+    };
   }
 }
