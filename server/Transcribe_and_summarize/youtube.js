@@ -201,6 +201,79 @@ const getVideoInfo = async (videoId) => {
 };
 
 /**
+ * Downloads audio from YouTube video using yt-dlp
+ * @param {string} videoId - YouTube video ID
+ * @returns {Promise<string>} - Path to downloaded audio
+ */
+const downloadYouTubeAudio = async (videoId) => {
+  try {
+    console.log(`Downloading audio from: https://www.youtube.com/watch?v=${videoId}`);
+    console.log(`Video ID: ${videoId}`);
+    
+    const outputPath = path.join(tempDir, `audio_${Date.now()}.mp3`);
+    
+    // Try with advanced options first
+    try {
+      // This command uses multiple techniques to bypass restrictions
+      const command = `yt-dlp -x --audio-format mp3 --audio-quality 0 --extractor-args "youtube:player_client=android,web" --user-agent "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/133.0.0.0 Safari/537.36" --add-header "Accept-Language: en-US,en;q=0.9" --sleep-interval 1 --max-sleep-interval 5 --geo-bypass-country US -o "${outputPath}" https://www.youtube.com/watch?v=${videoId}`;
+      
+      console.log(`Running command with advanced options: ${command}`);
+      
+      const { stdout } = await execAsync(command);
+      console.log(`YouTube download output: ${stdout}`);
+      return outputPath;
+    } catch (advancedError) {
+      console.log("Error with advanced options, trying alternative approach...");
+      console.log(advancedError.message);
+      
+      // Try with cookies from browser
+      try {
+        // Try with a different player client
+        const command = `yt-dlp -x --audio-format mp3 --audio-quality 0 --cookies-from-browser chrome --extractor-args "youtube:player_client=ios" --geo-bypass -o "${outputPath}" https://www.youtube.com/watch?v=${videoId}`;
+        console.log(`Running command with cookies: ${command}`);
+        
+        const { stdout } = await execAsync(command);
+        console.log(`YouTube download output: ${stdout}`);
+        return outputPath;
+      } catch (cookiesError) {
+        console.log("Error with cookies method, trying third approach...");
+        
+        // Try with embed page approach
+        try {
+          const command = `yt-dlp -x --audio-format mp3 --audio-quality 0 --referer "https://www.google.com/" --add-header "Origin:https://www.youtube.com" --embed-metadata --no-check-certificate --force-ipv4 -o "${outputPath}" https://www.youtube.com/embed/${videoId}`;
+          console.log(`Running embed approach: ${command}`);
+          
+          const { stdout } = await execAsync(command);
+          console.log(`YouTube download output: ${stdout}`);
+          return outputPath;
+        } catch (embedError) {
+          console.log("Error with embed approach, trying final method...");
+          
+          // Last resort: try with invidious
+          try {
+            const command = `yt-dlp -x --audio-format mp3 --audio-quality 0 -o "${outputPath}" https://invidious.snopyta.org/watch?v=${videoId}`;
+            console.log(`Running invidious approach: ${command}`);
+            
+            const { stdout } = await execAsync(command);
+            console.log(`YouTube download output: ${stdout}`);
+            return outputPath;
+          } catch (invidiousError) {
+            if (invidiousError.stderr && invidiousError.stderr.includes("Sign in to confirm you're not a bot")) {
+              throw new Error("YouTube is requiring authentication to access this video. Please try a different video or try again later.");
+            } else {
+              throw invidiousError;
+            }
+          }
+        }
+      }
+    }
+  } catch (error) {
+    console.error("Error downloading YouTube audio:", error);
+    throw error;
+  }
+};
+
+/**
  * Processes YouTube video
  * @param {string} url - YouTube URL
  * @param {string} outputType - Output type (summary or pdf)
