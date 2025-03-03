@@ -33,40 +33,48 @@ export function extractVideoId(url) {
 
 /**
  * Downloads audio from YouTube video
- * @param {string} youtubeUrl - YouTube URL
- * @param {string} outputPath - Path to save audio
- * @returns {Promise<object>} - Result object
+ * @param {string} videoId - YouTube video ID
+ * @returns {Promise<string>} - Path to downloaded audio
  */
-export async function downloadYouTubeAudio(youtubeUrl, outputPath) {
+const downloadYouTubeAudio = async (videoId) => {
   try {
-    console.log(`Downloading audio from: ${youtubeUrl}`);
-    
-    // Extract video ID
-    const videoId = extractVideoId(youtubeUrl);
+    console.log(`Downloading audio from: https://www.youtube.com/watch?v=${videoId}`);
     console.log(`Video ID: ${videoId}`);
     
-    // Try the alternative approach without browser cookies
-    const cmd = `yt-dlp -x --audio-format mp3 --audio-quality 0 --no-check-certificate --force-ipv4 --geo-bypass -o "${outputPath}" ${youtubeUrl}`;
-    console.log('Running command:', cmd);
+    const outputPath = path.join(process.cwd(), 'temp', `audio_${Date.now()}.mp3`);
     
-    const { stdout, stderr } = await execAsync(cmd);
-    
-    if (stderr && stderr.includes('ERROR:')) {
-      console.error('Error downloading audio:', stderr);
-      throw new Error(`yt-dlp error: ${stderr}`);
+    // Try with cookies from browser first
+    try {
+      const command = `yt-dlp -x --audio-format mp3 --audio-quality 0 --cookies-from-browser chrome -o "${outputPath}" https://www.youtube.com/watch?v=${videoId}`;
+      console.log(`Running command: ${command}`);
+      
+      const { stdout } = await exec(command);
+      console.log(`YouTube download output: ${stdout}`);
+      return outputPath;
+    } catch (error) {
+      console.log("Error with cookies-from-browser method, trying alternative approach...");
+      
+      // If that fails, try with other options
+      const command = `yt-dlp -x --audio-format mp3 --audio-quality 0 --no-check-certificate --force-ipv4 --geo-bypass -o "${outputPath}" https://www.youtube.com/watch?v=${videoId}`;
+      console.log(`Running command: ${command}`);
+      
+      try {
+        const { stdout } = await exec(command);
+        console.log(`YouTube download output: ${stdout}`);
+        return outputPath;
+      } catch (downloadError) {
+        if (downloadError.stderr && downloadError.stderr.includes("Sign in to confirm you're not a bot")) {
+          throw new Error("YouTube is requiring authentication to access this video. Please try a different video or try again later.");
+        } else {
+          throw downloadError;
+        }
+      }
     }
-    
-    console.log(`Audio downloaded to: ${outputPath}`);
-    
-    return {
-      method: 'download',
-      outputPath: outputPath
-    };
   } catch (error) {
-    console.error('Error downloading YouTube audio:', error);
+    console.error("Error downloading YouTube audio:", error);
     throw error;
   }
-}
+};
 
 /**
  * Gets transcript from YouTube API (fallback method)
@@ -141,59 +149,75 @@ export async function getVideoInfo(videoId) {
 
 /**
  * Processes YouTube video
- * @param {string} youtubeUrl - YouTube URL
+ * @param {string} url - YouTube URL
  * @param {string} outputType - Output type (summary or pdf)
+ * @param {object} options - Additional options
  * @returns {Promise<object>} - Result object
  */
-export async function processYouTube(youtubeUrl, outputType = 'summary') {
+export async function processYouTube(url, outputType = 'summary', options = {}) {
   try {
-    console.log(`Attempting to download and transcribe YouTube video...`);
-    const videoId = extractVideoId(youtubeUrl);
+    console.log("Attempting to download and transcribe YouTube video...");
+    
+    // Extract video ID from URL
+    const videoId = extractVideoId(url);
     if (!videoId) {
-      throw new Error('Invalid YouTube URL');
+      throw new Error("Invalid YouTube URL");
     }
     
-    console.log(`Downloading audio from: ${youtubeUrl}`);
-    console.log(`Video ID: ${videoId}`);
-    
-    // First try to get the transcript directly (without downloading)
-    const transcript = await getYouTubeTranscript(videoId);
-    
-    if (transcript) {
-      console.log('Successfully retrieved transcript, processing...');
-      // Process the transcript based on outputType
-      if (outputType === 'summary') {
-        return await summarizeText(transcript);
-      } else if (outputType === 'transcript') {
-        return transcript;
-      }
-    }
-    
-    // If we couldn't get the transcript, try downloading the audio
-    console.log('No transcript available, attempting to download audio...');
-    const timestamp = Date.now();
-    const outputPath = path.join(process.cwd(), 'temp', `audio_${timestamp}.mp3`);
-    
+    // First try to get transcript
     try {
-      await downloadYouTubeAudio(youtubeUrl, outputPath);
-      console.log(`Audio downloaded successfully to ${outputPath}`);
+      const transcript = await getYouTubeTranscript(videoId);
+      if (transcript) {
+        console.log("Successfully retrieved transcript");
+        
+        // Process the transcript based on output type
+        if (outputType === "summary") {
+          return await summarizeText(transcript, options);
+        } else if (outputType === "questions") {
+          return await generateQuestions(transcript, options);
+        } else {
+          return transcript;
+        }
+      }
+    } catch (transcriptError) {
+      console.log("Falling back to audio transcription...");
+      // If transcript retrieval fails, continue to audio download
+    }
+    
+    // If we get here, we need to download and transcribe the audio
+    try {
+      console.log("No transcript available, attempting to download audio...");
+      const audioPath = await downloadYouTubeAudio(videoId);
       
       // Transcribe the downloaded audio
-      console.log('Transcribing downloaded audio...');
-      const audioTranscript = await transcribeAudio(outputPath);
+      const transcription = await transcribeAudio(audioPath);
       
-      // Process the transcript based on outputType
-      if (outputType === 'summary') {
-        return await summarizeText(audioTranscript);
-      } else if (outputType === 'transcript') {
-        return audioTranscript;
+      // Clean up the temporary audio file
+      try {
+        fs.unlinkSync(audioPath);
+        console.log(`Deleted temporary file: ${audioPath}`);
+      } catch (unlinkError) {
+        console.error(`Error deleting temporary file: ${unlinkError.message}`);
+      }
+      
+      // Process the transcription based on output type
+      if (outputType === "summary") {
+        return await summarizeText(transcription, options);
+      } else if (outputType === "questions") {
+        return await generateQuestions(transcription, options);
+      } else {
+        return transcription;
       }
     } catch (downloadError) {
-      console.error('Error downloading or transcribing audio:', downloadError);
-      throw new Error('Failed to process YouTube video: ' + downloadError.message);
+      if (downloadError.message.includes("YouTube is requiring authentication")) {
+        throw downloadError; // Pass through the user-friendly error
+      } else {
+        console.error("Error downloading or transcribing audio:", downloadError);
+        throw new Error("Failed to process YouTube video: " + downloadError.message);
+      }
     }
   } catch (error) {
-    console.error('Error processing YouTube video:', error);
+    console.error("Error processing YouTube video:", error);
     throw error;
   }
 } 
