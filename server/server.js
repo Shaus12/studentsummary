@@ -675,9 +675,9 @@ async function fixDatabaseSchema() {
   try {
     console.log('Checking and fixing database schema...');
     
-    // Check if the membership_type column exists and has the correct type
+    // Check if the membership_type column exists
     const checkColumnResult = await db.query(`
-      SELECT column_name, data_type, udt_name
+      SELECT column_name
       FROM information_schema.columns
       WHERE table_name = 'users' AND column_name = 'membership_type'
     `);
@@ -685,62 +685,15 @@ async function fixDatabaseSchema() {
     if (checkColumnResult.rows.length === 0) {
       console.log('membership_type column does not exist, creating it...');
       
-      // Create the enum type if it doesn't exist
-      await db.query(`
-        DO $$ BEGIN
-          CREATE TYPE membership_status AS ENUM ('free', 'premium');
-        EXCEPTION
-          WHEN duplicate_object THEN null;
-        END $$;
-      `);
-      
-      // Add the column with the correct type
+      // Add the column as a simple text column
       await db.query(`
         ALTER TABLE users 
-        ADD COLUMN membership_type membership_status DEFAULT 'free'
+        ADD COLUMN membership_type TEXT DEFAULT 'free'
       `);
       
       console.log('membership_type column created successfully');
     } else {
-      console.log('membership_type column exists, checking its type...');
-      
-      // If the column exists but has the wrong type, we need to fix it
-      const dataType = checkColumnResult.rows[0].udt_name;
-      if (dataType !== 'membership_status') {
-        console.log(`membership_type column has incorrect type: ${dataType}, fixing...`);
-        
-        // Create a temporary column with the correct type
-        await db.query(`
-          ALTER TABLE users 
-          ADD COLUMN membership_type_new membership_status DEFAULT 'free'
-        `);
-        
-        // Copy data from old column to new column
-        await db.query(`
-          UPDATE users 
-          SET membership_type_new = 
-            CASE 
-              WHEN membership_type = 'premium' THEN 'premium'::membership_status 
-              ELSE 'free'::membership_status 
-            END
-        `);
-        
-        // Drop the old column
-        await db.query(`
-          ALTER TABLE users 
-          DROP COLUMN membership_type
-        `);
-        
-        // Rename the new column to the original name
-        await db.query(`
-          ALTER TABLE users 
-          RENAME COLUMN membership_type_new TO membership_type
-        `);
-        
-        console.log('membership_type column fixed successfully');
-      } else {
-        console.log('membership_type column has the correct type');
-      }
+      console.log('membership_type column exists');
     }
     
     console.log('Database schema check completed');
