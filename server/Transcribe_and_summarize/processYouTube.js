@@ -8,10 +8,16 @@ import { getYouTubeTranscript } from './YouTubeTranscript.js';
 import puppeteer from 'puppeteer';
 import { createClient } from '@deepgram/sdk';
 import { GoogleGenerativeAI } from '@google/generative-ai';
+import { transcribeAudio } from './Transcribe.js';
+import { summarizeText } from './Summarize.js';
+import { generatePDF } from './GeneratePDF.js';
+import { extractVideoId } from '../utils/youtubeUtils.js';
+import fetch from 'node-fetch';
+import { dirname } from 'path';
 
 const execAsync = promisify(exec);
 const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
+const __dirname = dirname(__filename);
 
 // Configure Deepgram with hardcoded key
 const deepgramApiKey = '2a60d94169738ee178d20bb606126fdd56c85710';
@@ -163,17 +169,88 @@ export async function processYouTube(youtubeUrl, outputType = 'summary', options
       throw new Error('Invalid YouTube URL');
     }
     
-    // Get video info from YouTube API
+    // Get video info for metadata
     const videoInfo = await getVideoInfo(videoId);
     
-    // Generate a summary based on the video info and options
-    const summary = generateSummaryFromVideoInfo(videoInfo, outputType, options);
-    
-    return {
-      summary,
-      pdfPath: null,
-      method: 'api'
-    };
+    // Try to download audio and transcribe it
+    try {
+      console.log("Downloading audio from YouTube...");
+      const audioPath = await downloadYouTubeAudio(youtubeUrl);
+      console.log(`Audio downloaded to ${audioPath}`);
+      
+      // Transcribe the audio
+      console.log("Transcribing audio...");
+      const transcription = await transcribeAudio(audioPath);
+      console.log("Audio transcribed successfully");
+      
+      // Clean up the audio file
+      fs.unlinkSync(audioPath);
+      
+      // Generate summary using the transcription
+      console.log("Generating summary from transcription...");
+      const summary = await summarizeText(transcription, options);
+      
+      return {
+        summary,
+        pdfPath: null,
+        method: 'transcription'
+      };
+    } catch (error) {
+      console.error("Error processing audio:", error);
+      
+      // Fallback to using video metadata
+      console.log("Falling back to video metadata...");
+      
+      // Get title and description
+      const title = videoInfo.snippet.title;
+      const description = videoInfo.snippet.description;
+      
+      // Format metadata for display
+      const language = options.language || 'en';
+      const labels = {
+        en: {
+          videoInfo: 'Video Information',
+          channel: 'Channel',
+          published: 'Published',
+          duration: 'Duration',
+          views: 'Views',
+          likes: 'Likes',
+          comments: 'Comments',
+          description: 'Description',
+          note: 'Note',
+          limitationsHeader: 'Limitations',
+          limitationsText: 'We were unable to access the video content directly. This information is based on the video metadata only.'
+        },
+        he: {
+          videoInfo: 'מידע על הסרטון',
+          channel: 'ערוץ',
+          published: 'פורסם',
+          duration: 'משך',
+          views: 'צפיות',
+          likes: 'לייקים',
+          comments: 'תגובות',
+          description: 'תיאור',
+          note: 'הערה',
+          limitationsHeader: 'מגבלות',
+          limitationsText: 'לא הצלחנו לגשת לתוכן הסרטון ישירות. מידע זה מבוסס על המטא-דאטה של הסרטון בלבד.'
+        }
+      };
+      
+      const l = labels[language] || labels.en;
+      
+      // Format the metadata as a summary
+      let summary = `# ${title}\n\n`;
+      summary += `## ${l.limitationsHeader}\n\n`;
+      summary += `${l.limitationsText}\n\n`;
+      summary += `## ${l.description}\n\n`;
+      summary += description;
+      
+      return {
+        summary,
+        pdfPath: null,
+        method: 'metadata'
+      };
+    }
   } catch (error) {
     console.error('Error in processYouTube:', error);
     
@@ -194,24 +271,9 @@ export async function processYouTube(youtubeUrl, outputType = 'summary', options
   }
 }
 
-// Helper functions
-function extractVideoId(url) {
-  if (!url) return null;
-  
-  // Regular expression to extract video ID from various YouTube URL formats
-  const regExp = /^.*(youtu.be\/|v\/|e\/|u\/\w+\/|embed\/|v=)([^#\&\?]*).*/;
-  const match = url.match(regExp);
-  
-  if (match && match[2].length === 11) {
-    return match[2];
-  }
-  
-  return null;
-}
-
+// Helper function to get video info
 async function getVideoInfo(videoId) {
   try {
-    // Use the provided YouTube Data API key
     const apiKey = 'AIzaSyAZ78Gva-kSMxsY0MQ6r2QREuDjvWmgjIA';
     
     console.log(`Fetching video info for video ID: ${videoId}`);
@@ -237,149 +299,29 @@ async function getVideoInfo(videoId) {
   }
 }
 
-function generateSummaryFromVideoInfo(videoInfo, outputType, options = {}) {
+// Helper functions
+function extractVideoId(url) {
+  if (!url) return null;
+  
+  // Regular expression to extract video ID from various YouTube URL formats
+  const regExp = /^.*(youtu.be\/|v\/|e\/|u\/\w+\/|embed\/|v=)([^#\&\?]*).*/;
+  const match = url.match(regExp);
+  
+  if (match && match[2].length === 11) {
+    return match[2];
+  }
+  
+  return null;
+}
+
+async function downloadAudio(youtubeUrl) {
   try {
-    console.log('Generating summary from video info');
-    
-    // Get language preference
-    const language = options.language || 'en';
-    console.log(`Using language: ${language}`);
-    
-    // Extract relevant information
-    const snippet = videoInfo.snippet || {};
-    const statistics = videoInfo.statistics || {};
-    const contentDetails = videoInfo.contentDetails || {};
-    
-    const title = snippet.title || 'Untitled Video';
-    const description = snippet.description || 'No description available';
-    const channelTitle = snippet.channelTitle || 'Unknown Channel';
-    const publishedAt = snippet.publishedAt ? new Date(snippet.publishedAt).toLocaleDateString() : 'Unknown date';
-    const viewCount = statistics.viewCount ? parseInt(statistics.viewCount).toLocaleString() : 'Unknown';
-    const likeCount = statistics.likeCount ? parseInt(statistics.likeCount).toLocaleString() : 'Unknown';
-    const commentCount = statistics.commentCount ? parseInt(statistics.commentCount).toLocaleString() : 'Unknown';
-    
-    // Format duration
-    let duration = 'Unknown duration';
-    if (contentDetails.duration) {
-      // Convert ISO 8601 duration to readable format
-      const match = contentDetails.duration.match(/PT(\d+H)?(\d+M)?(\d+S)?/);
-      const hours = (match[1] || '').replace('H', '');
-      const minutes = (match[2] || '').replace('M', '');
-      const seconds = (match[3] || '').replace('S', '');
-      
-      duration = '';
-      if (hours) duration += `${hours} hours `;
-      if (minutes) duration += `${minutes} minutes `;
-      if (seconds) duration += `${seconds} seconds`;
-      duration = duration.trim();
-    }
-    
-    // Multilingual labels
-    const labels = {
-      en: {
-        channel: 'Channel',
-        published: 'Published',
-        duration: 'Duration',
-        views: 'Views',
-        likes: 'Likes',
-        comments: 'Comments',
-        summary: 'Summary',
-        note: 'Note',
-        noDescription: 'No description available for this video.',
-        generatedNote: 'This summary was generated based on the video\'s metadata. For a more detailed understanding, please watch the full video on YouTube.',
-        keyPoints: 'Key Points',
-        additionalContent: '... (additional content in the description)',
-        noKeyPoints: 'No key points could be extracted from the video description',
-        watchVideo: 'For detailed information, please watch the video',
-        videoStats: 'Video Statistics',
-        automatedSummary: 'This is an automated summary based on the video metadata. For complete information, please watch the full video.'
-      },
-      he: {
-        channel: 'ערוץ',
-        published: 'פורסם',
-        duration: 'משך',
-        views: 'צפיות',
-        likes: 'לייקים',
-        comments: 'תגובות',
-        summary: 'סיכום',
-        note: 'הערה',
-        noDescription: 'אין תיאור זמין לסרטון זה.',
-        generatedNote: 'סיכום זה נוצר על בסיס המטא-דאטה של הסרטון. להבנה מפורטת יותר, אנא צפה בסרטון המלא ביוטיוב.',
-        keyPoints: 'נקודות מפתח',
-        additionalContent: '... (תוכן נוסף בתיאור)',
-        noKeyPoints: 'לא ניתן לחלץ נקודות מפתח מתיאור הסרטון',
-        watchVideo: 'למידע מפורט, אנא צפה בסרטון',
-        videoStats: 'נתוני הסרטון',
-        automatedSummary: 'זהו סיכום אוטומטי המבוסס על המטא-דאטה של הסרטון. למידע מלא, אנא צפה בסרטון המלא.'
-      }
-    };
-    
-    // Use English as fallback if requested language is not supported
-    const l = labels[language] || labels.en;
-    
-    // Generate summary based on output type
-    let summary = '';
-    
-    if (outputType === 'summary') {
-      summary = `# ${title}\n\n`;
-      summary += `**${l.channel}:** ${channelTitle}\n`;
-      summary += `**${l.published}:** ${publishedAt}\n`;
-      summary += `**${l.duration}:** ${duration}\n`;
-      summary += `**${l.views}:** ${viewCount} | **${l.likes}:** ${likeCount} | **${l.comments}:** ${commentCount}\n\n`;
-      
-      summary += `## ${l.summary}\n\n`;
-      
-      if (description.length > 0) {
-        // Clean up and format the description
-        const cleanDescription = description
-          .replace(/\n{3,}/g, '\n\n')  // Replace multiple newlines with double newlines
-          .trim();
-        
-        summary += `${cleanDescription}\n\n`;
-      } else {
-        summary += `${l.noDescription}\n\n`;
-      }
-      
-      summary += `## ${l.note}\n\n`;
-      summary += `${l.generatedNote}`;
-    } else if (outputType === 'notes') {
-      summary = `# ${title}\n\n`;
-      summary += `**${l.channel}:** ${channelTitle}\n`;
-      summary += `**${l.published}:** ${publishedAt}\n\n`;
-      
-      summary += `## ${l.keyPoints}\n\n`;
-      
-      // Extract potential key points from description
-      const lines = description.split('\n').filter(line => line.trim().length > 0);
-      
-      if (lines.length > 0) {
-        for (let i = 0; i < Math.min(lines.length, 10); i++) {
-          summary += `- ${lines[i]}\n`;
-        }
-        
-        if (lines.length > 10) {
-          summary += `- ${l.additionalContent}\n`;
-        }
-      } else {
-        summary += `- ${l.noKeyPoints}\n`;
-        summary += `- ${l.watchVideo}\n`;
-      }
-      
-      summary += `\n## ${l.videoStats}\n\n`;
-      summary += `- ${l.duration}: ${duration}\n`;
-      summary += `- ${l.views}: ${viewCount}\n`;
-      summary += `- ${l.likes}: ${likeCount}\n`;
-      summary += `- ${l.comments}: ${commentCount}\n\n`;
-      
-      summary += `${l.automatedSummary}`;
-    }
-    
-    console.log('Summary generated successfully');
-    return summary;
+    console.log(`Downloading audio from ${youtubeUrl}...`);
+    const audioPath = await downloadYouTubeAudio(youtubeUrl);
+    console.log(`Audio downloaded to ${audioPath}`);
+    return audioPath;
   } catch (error) {
-    console.error('Error generating summary from video info:', error);
-    
-    // Return a simple fallback summary
-    return `Summary for YouTube video: Unable to generate a detailed summary due to an error. Please watch the video directly.`;
+    console.error("Error downloading audio:", error);
+    throw error;
   }
 }
