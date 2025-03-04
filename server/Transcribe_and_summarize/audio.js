@@ -110,28 +110,27 @@ export const transcribeAudio = async (audioPath, options = {}) => {
     console.log('Sending audio to Deepgram with Whisper Large model and Hebrew language');
     console.log('Transcription options:', transcriptionOptions);
     
-    // Send to Deepgram using the new SDK format
-    const { result, error } = await deepgram.listen.prerecorded.transcribeFile(
-      audioBuffer,
-      transcriptionOptions
-    );
+    // Create a source object from the audio buffer
+    const source = {
+      buffer: audioBuffer,
+      mimetype: 'audio/mp3'
+    };
     
-    if (error) {
-      throw new Error(`Deepgram error: ${error.message}`);
-    }
+    // Send to Deepgram using the old SDK format (which is what you have installed)
+    const response = await deepgram.transcription.preRecorded(source, transcriptionOptions);
     
     // Save the full response for debugging
     const responseOutputPath = path.join(tempDir, `deepgram_response_${Date.now()}.json`);
-    fs.writeFileSync(responseOutputPath, JSON.stringify(result, null, 2));
+    fs.writeFileSync(responseOutputPath, JSON.stringify(response, null, 2));
     console.log(`Saved full Deepgram response to ${responseOutputPath}`);
     
     // Extract transcript
-    if (!result || !result.results || !result.results.channels) {
+    if (!response || !response.results || !response.results.channels) {
       throw new Error('Invalid response from Deepgram');
     }
     
     // Get transcript from the first channel
-    const transcript = result.results.channels[0].alternatives[0].transcript;
+    const transcript = response.results.channels[0].alternatives[0].transcript;
     
     if (!transcript || transcript.trim() === '') {
       throw new Error('No transcript returned from Deepgram');
