@@ -378,10 +378,30 @@ app.post('/api/upload-audio', upload.single('audioFile'), async (req, res) => {
     
     console.log('File processed successfully');
     
+    // Get user email from token
+    const token = req.headers.authorization?.split(' ')[1];
+    if (!token) {
+      return res.status(401).json({ error: 'No authorization token provided' });
+    }
+    
+    let userEmail;
+    try {
+      const decoded = jwt.verify(token, process.env.JWT_SECRET);
+      userEmail = decoded.email;
+    } catch (error) {
+      return res.status(401).json({ error: 'Invalid token' });
+    }
+    
     // Save the result to the database
     console.log('Saving result to database');
-    const userId = req.user.id;
-    const summaryId = await saveSummary(userId, result.summary, req.file.originalname);
+    const summaryResult = await db.query(
+      `INSERT INTO summaries (user_email, summary, created_at, file_name)
+       VALUES ($1, $2, NOW(), $3)
+       RETURNING id`,
+      [userEmail, result.summary, req.file.originalname]
+    );
+    
+    const summaryId = summaryResult.rows[0].id;
     console.log('Summary saved with ID:', summaryId);
     
     // Send the response
@@ -434,77 +454,58 @@ app.post('/api/process-audio', upload.any(), async (req, res) => {
     const usageCheck = await checkAndUpdateUsage(userEmail);
     if (!usageCheck.allowed) {
       // Clean up the uploaded file
-      await unlink(uploadedFile.path);
+      await cleanupFile(uploadedFile.path);
       return res.status(403).json({ error: 'Usage limit exceeded' });
     }
     
-    // Process the uploaded file with better error handling
-    let result;
+    // Process the uploaded file
     try {
       console.log('Starting to process file:', uploadedFile.path);
       
-      // Check if the file exists
-      if (!fs.existsSync(uploadedFile.path)) {
-        throw new Error(`File not found: ${uploadedFile.path}`);
+      // Process the uploaded file using the working implementation
+      const transcript = await transcribeAudio(uploadedFile.path);
+      const summary = await summarizeText(transcript);
+      
+      // Generate PDF if requested
+      let pdfPath = null;
+      if (req.body.outputType === 'pdf') {
+        pdfPath = await generatePDF(summary);
       }
       
-      // Try to process the file
-      result = await processUploadedFile(uploadedFile.path, 'summary');
+      const result = {
+        summary,
+        pdfPath,
+        method: 'upload'
+      };
+      
       console.log('File processed successfully');
-    } catch (processingError) {
-      console.error('Error in processUploadedFile:', processingError);
-      throw new Error(`Failed to process audio file: ${processingError.message}`);
-    }
-    
-    // Check if result is valid
-    if (!result || !result.summary) {
-      throw new Error('Processing completed but no summary was generated');
-    }
-    
-    console.log('Saving result to database');
-    
-    // Save the result to the database
-    const insertResult = await db.query(
-      `INSERT INTO summaries (user_email, file_name, summary, created_at)
-       VALUES ($1, $2, $3, NOW())
-       RETURNING id`,
-      [userEmail, uploadedFile.originalname, result.summary]
-    );
-    
-    const summaryId = insertResult.rows[0].id;
-    console.log('Summary saved with ID:', summaryId);
-    
-    // Return the result
-    res.status(200).json({
-      success: true,
-      message: 'Audio processed successfully',
-      data: {
-        transcription: result.transcription,
+      
+      // Save the result to the database
+      const summaryId = await db.query(
+        `INSERT INTO summaries (user_email, summary, created_at, file_name)
+         VALUES ($1, $2, NOW(), $3)
+         RETURNING id`,
+        [userEmail, result.summary, uploadedFile.originalname]
+      );
+      
+      // Send the response
+      res.json({
+        success: true,
         summary: result.summary,
-        summaryId: summaryId
-      }
-    });
+        pdfPath: result.pdfPath,
+        method: 'upload'
+      });
+    } catch (error) {
+      console.error('Error in processing file:', error);
+      // Clean up the uploaded file
+      await cleanupFile(uploadedFile.path);
+      throw error;
+    }
   } catch (error) {
     console.error('Error processing audio file:', error);
-    
-    // Clean up the uploaded files if they exist
-    if (req.files && req.files.length > 0) {
-      for (const file of req.files) {
-        if (fs.existsSync(file.path)) {
-          try {
-            await unlink(file.path);
-            console.log('Cleaned up uploaded file:', file.path);
-          } catch (unlinkError) {
-            console.error('Error deleting uploaded file:', unlinkError);
-          }
-        }
-      }
-    }
-    
     res.status(500).json({ 
-      error: 'Error processing audio file', 
-      details: error.message,
-      success: false
+      error: 'Failed to process audio file', 
+      details: error.message 
     });
   }
 });
