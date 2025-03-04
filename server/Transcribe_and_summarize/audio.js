@@ -1,6 +1,6 @@
 import fs from 'fs';
 import path from 'path';
-import { Deepgram } from '@deepgram/sdk';
+import { createClient } from '@deepgram/sdk';
 import { fileURLToPath } from 'url';
 import ffmpeg from 'fluent-ffmpeg';
 import { promisify } from 'util';
@@ -16,9 +16,9 @@ if (!fs.existsSync(tempDir)) {
   fs.mkdirSync(tempDir, { recursive: true });
 }
 
-// Initialize Deepgram client
+// Initialize Deepgram client with the new SDK format
 const deepgramApiKey = process.env.DEEPGRAM_API_KEY;
-const deepgram = new Deepgram(deepgramApiKey);
+const deepgram = createClient(deepgramApiKey);
 
 /**
  * Convert audio file to a format compatible with transcription services
@@ -96,36 +96,30 @@ export const transcribeAudio = async (audioPath, options = {}) => {
     
     // Set up transcription options specifically for Hebrew with Whisper Large
     const transcriptionOptions = {
-      smart_format: true,
-      model: 'whisper-large', // Use Whisper Large model
-      language: 'he', // Explicitly set to Hebrew
-      detect_language: false, // Don't auto-detect, we know it's Hebrew
+      model: "whisper-large",
+      language: "he",
+      detect_language: false,
       diarize: true,
+      smart_format: true,
       utterances: true,
-      punctuate: true,
-      profanity_filter: false, // Allow all words for accurate transcription
-      tier: 'enhanced' // Use enhanced tier for better quality
+      punctuate: true
     };
     
     console.log('Sending audio to Deepgram with Whisper Large model and Hebrew language');
     console.log('Transcription options:', transcriptionOptions);
     
-    // Create a source object from the audio buffer
-    const source = {
-      buffer: audioBuffer,
-      mimetype: 'audio/mp3'
-    };
-    
-    // Send to Deepgram using the old SDK format (which is what you have installed)
-    const response = await deepgram.transcription.preRecorded(source, transcriptionOptions);
+    // Use the new SDK format for transcription
+    const response = await deepgram.listen.prerecorded.transcribeFile(audioBuffer, transcriptionOptions);
     
     // Save the full response for debugging
     const responseOutputPath = path.join(tempDir, `deepgram_response_${Date.now()}.json`);
     fs.writeFileSync(responseOutputPath, JSON.stringify(response, null, 2));
     console.log(`Saved full Deepgram response to ${responseOutputPath}`);
     
-    // Extract transcript
-    if (!response || !response.results || !response.results.channels) {
+    // Extract transcript from the new response format
+    if (!response || !response.results || !response.results.channels || 
+        !response.results.channels[0] || !response.results.channels[0].alternatives || 
+        !response.results.channels[0].alternatives[0]) {
       throw new Error('Invalid response from Deepgram');
     }
     
