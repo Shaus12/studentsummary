@@ -22,7 +22,7 @@ import { createClient } from '@deepgram/sdk';
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import fs from 'fs';
 import puppeteer from 'puppeteer';
-import { processAudioFile } from './Transcribe_and_summarize/audio_old.js';
+import { processAudioFile } from './Transcribe_and_summarize/audioProcessing.js';
 import { v4 as uuidv4 } from 'uuid';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -327,7 +327,7 @@ app.post("/api/process-youtube", async (req, res) => {
     }
     
     // Process the YouTube video using the old implementation
-    const { processYouTube } = await import('./Transcribe_and_summarize/processYouTube_old.js');
+    const { processYouTube } = await import('./Transcribe_and_summarize/processYT.js');
     const result = await processYouTube(youtubeUrl, 'summary', { language: 'he' });
     
     // Save the result to the database
@@ -737,7 +737,7 @@ app.post('/api/process-audio', upload.single('audioFile'), async (req, res) => {
     }
     
     // Process the uploaded file using the old implementation
-    const { processAudioFile } = await import('./Transcribe_and_summarize/audio_old.js');
+    const { processAudioFile } = await import('./Transcribe_and_summarize/audioProcessing.js');
     const result = await processAudioFile(req.file.path, {
       outputType: 'summary',
       language: 'he'
@@ -787,7 +787,7 @@ app.post('/api/upload-large-file', (req, res) => {
       console.log(`Large file uploaded: ${filePath}`);
       
       // Process the file
-      const { processAudioFile } = await import('./Transcribe_and_summarize/audio_old.js');
+      const { processAudioFile } = await import('./Transcribe_and_summarize/audioProcessing.js');
       const result = await processAudioFile(filePath, {
         outputType: 'summary',
         summaryOptions: { language: 'he' }
@@ -912,7 +912,7 @@ app.post('/api/process-chunked-file', async (req, res) => {
     }
     
     // Process the file
-    const { processAudioFile } = await import('./Transcribe_and_summarize/audio_old.js');
+    const { processAudioFile } = await import('./Transcribe_and_summarize/audioProcessing.js');
     const result = await processAudioFile(filePath, {
       outputType: 'summary',
       language: 'he',
@@ -1088,6 +1088,38 @@ app.get('/api/usage-status', async (req, res) => {
     });
   }
 });
+
+// Add this wrapper function to maintain compatibility
+async function processAudioFile(filePath, options = {}) {
+  try {
+    const { transcribeAudio, summarizeText } = await import('./Transcribe_and_summarize/audioProcessing.js');
+    
+    // Transcribe the audio
+    const transcript = await transcribeAudio(filePath);
+    
+    // Return the transcription or summary based on options
+    if (options.outputType === 'transcription') {
+      return {
+        transcription: transcript,
+        success: true
+      };
+    } else if (options.outputType === 'summary') {
+      // Generate summary
+      const summary = await summarizeText(transcript, options.summaryOptions || {});
+      
+      return {
+        summary,
+        transcription: options.includeTranscription ? transcript : undefined,
+        success: true
+      };
+    } else {
+      throw new Error('Invalid output type specified');
+    }
+  } catch (error) {
+    console.error('Error processing audio file:', error);
+    throw new Error(`Failed to process audio file: ${error.message}`);
+  }
+}
 
 // Start the server
 app.listen(PORT, () => {
