@@ -6,6 +6,7 @@ import ffmpeg from 'fluent-ffmpeg';
 import { promisify } from 'util';
 import { cleanupFile } from './utils.js';
 import { summarizeText } from './utils.js';
+import Deepgram from '@deepgram/sdk';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -79,7 +80,8 @@ export async function transcribeAudio(filePath, language) {
       deepgramLanguage = null; // Let Deepgram auto-detect
     }
     
-    const deepgramOptions = {
+    // Configure options for Deepgram API v3
+    const options = {
       smart_format: true,
       model: "nova-2",
       diarize: true,
@@ -89,42 +91,46 @@ export async function transcribeAudio(filePath, language) {
     
     // Only add language if it's specified (not auto)
     if (deepgramLanguage) {
-      deepgramOptions.language = deepgramLanguage;
+      options.language = deepgramLanguage;
     }
     
-    console.log("Sending request to Deepgram with options:", JSON.stringify(deepgramOptions));
+    console.log("Sending request to Deepgram with options:", JSON.stringify(options));
     
-    const response = await deepgram.transcription.preRecorded(
-      { buffer: audioFile, mimetype: 'audio/mpeg' },
-      deepgramOptions
-    );
+    // Use the new format for Deepgram SDK v3
+    const deepgram = new Deepgram(process.env.DEEPGRAM_API_KEY);
     
-    // Validate response structure before processing
-    if (!response || !response.results) {
-      console.error("Unexpected Deepgram response structure:", JSON.stringify(response));
-      throw new Error("Invalid response structure from Deepgram");
-    }
+    // Create a source from the file buffer
+    const source = {
+      buffer: audioFile,
+      mimetype: 'audio/mpeg' // Adjust based on your file type
+    };
     
-    // Extract transcript from response
-    const transcript = response.results.channels[0].alternatives[0].transcript;
+    // Use the v3 SDK format for transcription
+    const response = await deepgram.listen.prerecorded.transcribeFile(source, options);
     
-    if (!transcript) {
-      console.warn("Empty transcript received from Deepgram");
-      return { transcript: "", paragraphs: [] };
-    }
-    
-    // Process paragraphs from utterances if available
+    // Extract transcript from the response
+    let transcript = '';
     let paragraphs = [];
-    if (response.results.utterances && response.results.utterances.length > 0) {
-      paragraphs = response.results.utterances.map(utterance => ({
-        text: utterance.transcript,
-        start: utterance.start,
-        end: utterance.end,
-        speaker: utterance.speaker || 0
-      }));
+    
+    if (response && response.results && response.results.channels && response.results.channels.length > 0) {
+      // Extract the full transcript
+      transcript = response.results.channels[0].alternatives[0]?.transcript || '';
+      
+      // Extract paragraphs/utterances if available
+      if (response.results.utterances && response.results.utterances.length > 0) {
+        paragraphs = response.results.utterances.map(utterance => ({
+          text: utterance.transcript,
+          start: utterance.start,
+          end: utterance.end,
+          speaker: utterance.speaker || 0
+        }));
+      } else {
+        // Fallback if no utterances
+        paragraphs = [{ text: transcript, start: 0, end: 0, speaker: 0 }];
+      }
     } else {
-      // Fallback if no utterances
-      paragraphs = [{ text: transcript, start: 0, end: 0, speaker: 0 }];
+      console.error("Unexpected response structure from Deepgram:", JSON.stringify(response));
+      throw new Error("Invalid response structure from Deepgram");
     }
     
     return { transcript, paragraphs };
