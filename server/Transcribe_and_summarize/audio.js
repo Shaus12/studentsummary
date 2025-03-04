@@ -62,105 +62,87 @@ const convertAudioFormat = async (inputPath) => {
  * @param {object} options - Transcription options
  * @returns {Promise<string>} - Transcription text
  */
-export async function transcribeAudio(audioFilePath, options = {}) {
+export async function transcribeAudio(filePath, language) {
   try {
-    console.log('Transcribing audio file:', audioFilePath);
-    console.log('Transcription options:', options);
-
+    console.log(`Transcribing audio file: ${filePath} with language: ${language}`);
+    
     // Check if file exists
-    if (!fs.existsSync(audioFilePath)) {
-      throw new Error(`Audio file not found: ${audioFilePath}`);
+    if (!fs.existsSync(filePath)) {
+      throw new Error(`File not found: ${filePath}`);
     }
-
-    // Get file size
-    const stats = fs.statSync(audioFilePath);
-    console.log('Audio file size:', stats.size, 'bytes');
-
-    // Read the audio file
-    const audioBuffer = fs.readFileSync(audioFilePath);
-
-    // Configure Deepgram request
-    const transcriptionOptions = {
-      model: 'whisper-large',
-      language: 'he',
-      detect_language: false,
-      diarize: true,
+    
+    const audioFile = fs.readFileSync(filePath);
+    
+    // Determine the appropriate language parameter based on the input
+    let deepgramLanguage = language;
+    if (language === 'auto') {
+      deepgramLanguage = null; // Let Deepgram auto-detect
+    }
+    
+    const deepgramOptions = {
       smart_format: true,
+      model: "nova-2",
+      diarize: true,
       utterances: true,
       punctuate: true,
-      ...options
     };
-
-    console.log('Sending audio to Deepgram with Whisper Large model and Hebrew language');
-    console.log('Transcription options:', transcriptionOptions);
-
-    try {
-      // Create a Deepgram client
-      const deepgramApiKey = process.env.DEEPGRAM_API_KEY || '2a60d94169738ee178d20bb606126fdd56c85710';
-      const deepgram = createClient(deepgramApiKey);
-
-      // Send the audio to Deepgram
-      const response = await deepgram.listen.prerecorded.transcribeFile(
-        audioBuffer,
-        transcriptionOptions
-      );
-
-      // Save the full response for debugging
-      const responseFilePath = path.join(
-        path.dirname(audioFilePath),
-        `deepgram_response_${Date.now()}.json`
-      );
-      fs.writeFileSync(responseFilePath, JSON.stringify(response, null, 2));
-      console.log(`Saved full Deepgram response to ${responseFilePath}`);
-
-      // Check if response has the expected structure
-      if (!response || !response.results || !response.results.channels) {
-        console.error('Unexpected Deepgram response structure:', JSON.stringify(response));
-        throw new Error('Invalid response from Deepgram');
-      }
-
-      // Extract the transcript
-      let transcript = '';
-      
-      // Try to get the transcript from the response
-      try {
-        // First try the standard path
-        if (response.results.channels[0].alternatives[0].transcript) {
-          transcript = response.results.channels[0].alternatives[0].transcript;
-        } 
-        // If that fails, try to get it from utterances
-        else if (response.results.utterances && response.results.utterances.length > 0) {
-          transcript = response.results.utterances.map(u => u.transcript).join(' ');
-        }
-        // If both fail, throw an error
-        else {
-          throw new Error('No transcript found in Deepgram response');
-        }
-      } catch (extractError) {
-        console.error('Error extracting transcript from Deepgram response:', extractError);
-        console.error('Response structure:', JSON.stringify(response));
-        throw new Error('Failed to extract transcript from Deepgram response');
-      }
-
-      if (!transcript) {
-        throw new Error('Empty transcript from Deepgram');
-      }
-
-      console.log('Transcription successful');
-      return transcript;
-    } catch (deepgramError) {
-      console.error('Error with Deepgram API:', deepgramError);
-      
-      // Try an alternative transcription method if Deepgram fails
-      console.log('Attempting alternative transcription method...');
-      
-      // Here you could implement a fallback to another service
-      // For now, we'll just throw the error
-      throw new Error(`Failed to transcribe with Deepgram: ${deepgramError.message}`);
+    
+    // Only add language if it's specified (not auto)
+    if (deepgramLanguage) {
+      deepgramOptions.language = deepgramLanguage;
     }
+    
+    console.log("Sending request to Deepgram with options:", JSON.stringify(deepgramOptions));
+    
+    const response = await deepgram.transcription.preRecorded(
+      { buffer: audioFile, mimetype: 'audio/mpeg' },
+      deepgramOptions
+    );
+    
+    // Validate response structure before processing
+    if (!response || !response.results) {
+      console.error("Unexpected Deepgram response structure:", JSON.stringify(response));
+      throw new Error("Invalid response structure from Deepgram");
+    }
+    
+    // Extract transcript from response
+    const transcript = response.results.channels[0].alternatives[0].transcript;
+    
+    if (!transcript) {
+      console.warn("Empty transcript received from Deepgram");
+      return { transcript: "", paragraphs: [] };
+    }
+    
+    // Process paragraphs from utterances if available
+    let paragraphs = [];
+    if (response.results.utterances && response.results.utterances.length > 0) {
+      paragraphs = response.results.utterances.map(utterance => ({
+        text: utterance.transcript,
+        start: utterance.start,
+        end: utterance.end,
+        speaker: utterance.speaker || 0
+      }));
+    } else {
+      // Fallback if no utterances
+      paragraphs = [{ text: transcript, start: 0, end: 0, speaker: 0 }];
+    }
+    
+    return { transcript, paragraphs };
   } catch (error) {
-    console.error('Error transcribing audio:', error);
-    throw new Error(`Failed to transcribe audio: ${error.message}`);
+    console.error("Error with Deepgram API:", error);
+    
+    // Improved error handling with more context
+    if (error.response) {
+      try {
+        console.error("Deepgram error response:", JSON.stringify(error.response));
+      } catch (e) {
+        console.error("Deepgram error response (non-JSON):", error.response);
+      }
+    }
+    
+    // Try to extract more meaningful error message
+    const errorMessage = error.message || "Unknown error";
+    throw new Error(`Failed to transcribe with Deepgram: ${errorMessage}`);
   }
 }
 
@@ -175,7 +157,7 @@ export const processAudioFile = async (filePath, options = {}) => {
     console.log(`Processing uploaded audio file: ${filePath}`);
     
     // Transcribe the audio
-    const transcription = await transcribeAudio(filePath, options);
+    const transcription = await transcribeAudio(filePath, options.language || 'auto');
     
     // Return the transcription or summary based on options
     if (options.outputType === 'transcription') {
@@ -185,11 +167,11 @@ export const processAudioFile = async (filePath, options = {}) => {
       };
     } else if (options.outputType === 'summary') {
       // Generate summary
-      const summary = await summarizeText(transcription, options.summaryOptions || {});
+      const summary = await summarizeText(transcription.transcript, options.summaryOptions || {});
       
       return {
         summary,
-        transcription: options.includeTranscription ? transcription : undefined,
+        transcription: options.includeTranscription ? transcription.transcript : undefined,
         success: true
       };
     } else {
@@ -212,10 +194,10 @@ export async function processUploadedFile(filePath, outputType = 'summary') {
     console.log(`Processing uploaded file: ${filePath}`);
     
     // Step 1: Transcribe the audio
-    const transcription = await transcribeAudio(filePath);
+    const transcription = await transcribeAudio(filePath, 'auto');
 
     // Step 2: Break transcription into chunks
-    const words = transcription.split(" ");
+    const words = transcription.transcript.split(" ");
     const chunkSize = 1500;
     const chunks = [];
 
