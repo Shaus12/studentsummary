@@ -4,16 +4,26 @@ import puppeteer from 'puppeteer';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import dotenv from 'dotenv';
+
+// Load environment variables
+dotenv.config();
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-// Configure Deepgram with the correct API key
-const deepgramApiKey = process.env.DEEPGRAM_API_KEY || '26e3b5fc5fd1451123c9c799ede5d211ff94fce9';
+// Log the API key (first few characters) to verify it's loaded
+console.log(`Deepgram API key (first 5 chars): ${process.env.DEEPGRAM_API_KEY?.substring(0, 5)}...`);
+
+// Configure Deepgram with the API key from .env
+const deepgramApiKey = process.env.DEEPGRAM_API_KEY;
+console.log(`Using Deepgram API key: ${deepgramApiKey?.substring(0, 5)}...`);
+
+// Create the Deepgram client with the correct initialization
 const deepgram = createClient(deepgramApiKey);
 
-// Configure Gemini with the correct API key and model
-const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || 'AIzaSyCzIsCmQVuaiUKd0TqaIctPVZ0Bj_3i11A');
+// Configure Gemini with the API key from .env
+const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 
 /**
  * Transcribe audio file using Deepgram
@@ -23,6 +33,7 @@ const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || 'AIzaSyCzIsCm
 export async function transcribeAudio(filePath) {
   try {
     console.log(`Transcribing audio file: ${filePath}`);
+    console.log(`Using Deepgram API key: ${deepgramApiKey?.substring(0, 5)}...`);
     
     // Read the audio file
     const audioFile = fs.readFileSync(filePath);
