@@ -388,6 +388,20 @@ app.post('/api/upload-audio', upload.single('audio'), async (req, res) => {
     // Process the uploaded file
     const result = await processUploadedFile(req.file.path, 'summary');
     
+    // Generate PDF if needed
+    let pdfPath = null;
+    if (result.summary) {
+      try {
+        const pdfFileName = `summary_${Date.now()}.pdf`;
+        const pdfFilePath = path.join(__dirname, 'temp', pdfFileName);
+        await generatePDF(result.summary, pdfFilePath);
+        pdfPath = `/files/${pdfFileName}`; // Path relative to server
+        console.log(`PDF generated at: ${pdfFilePath}, accessible at: ${pdfPath}`);
+      } catch (pdfError) {
+        console.error('Error generating PDF:', pdfError);
+      }
+    }
+    
     // Save the result to the database
     const insertResult = await db.query(
       `INSERT INTO summaries (user_email, file_name, summary, created_at)
@@ -398,11 +412,12 @@ app.post('/api/upload-audio', upload.single('audio'), async (req, res) => {
     
     const summaryId = insertResult.rows[0].id;
     
-    // Return the result
+    // Return the result in the format expected by SummaryResult.jsx
     res.json({
+      success: true,
       id: summaryId,
       summary: result.summary,
-      success: true
+      pdfPath: pdfPath // This matches what SummaryResult.jsx expects
     });
   } catch (error) {
     console.error('Error processing audio file:', error);
@@ -417,8 +432,8 @@ app.post('/api/upload-audio', upload.single('audio'), async (req, res) => {
     }
     
     res.status(500).json({ 
-      error: 'Error processing audio file', 
-      details: error.message 
+      success: false,
+      error: `Failed to process audio file: ${error.message}`
     });
   }
 });
