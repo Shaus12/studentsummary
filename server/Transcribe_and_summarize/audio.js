@@ -62,7 +62,7 @@ const convertAudioFormat = async (inputPath) => {
 };
 
 /**
- * Transcribe audio file using Deepgram with the latest SDK format
+ * Transcribe audio file using Deepgram with Whisper Large model
  * @param {string} audioPath - Path to audio file
  * @param {object} options - Transcription options
  * @returns {Promise<object>} - Transcription response
@@ -77,18 +77,19 @@ export async function transcribeAudio(filePath, language = 'auto') {
     // Read the audio file
     const audioFile = await fs.promises.readFile(convertedFilePath);
     
-    // Configure Deepgram options
+    // Configure Deepgram options with Whisper Large model
     const options = {
       smart_format: true,
-      model: "nova-2",
+      model: "whisper-large",  // Use Whisper Large model
       diarize: true,
       utterances: true,
-      punctuate: true
+      punctuate: true,
+      language: 'he'  // Always use Hebrew language
     };
     
-    // If language is specifically set to Hebrew, add it to options
-    if (language === 'he' || language === 'hebrew' || language === 'Hebrew') {
-      options.language = 'he';
+    // If language is specifically set, override the default
+    if (language && language !== 'auto') {
+      options.language = language;
     }
     
     console.log(`Sending request to Deepgram with options:`, options);
