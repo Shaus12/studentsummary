@@ -471,11 +471,31 @@ app.post('/api/upload-audio', upload.single('audio'), async (req, res) => {
   }
 });
 
+// Add this middleware to debug authentication issues
+app.use((req, res, next) => {
+  const authHeader = req.headers.authorization;
+  console.log(`Request to ${req.path}, Auth header: ${authHeader ? 'Present' : 'Missing'}`);
+  
+  if (authHeader && authHeader.startsWith('Bearer ')) {
+    const token = authHeader.split(' ')[1];
+    try {
+      const decoded = jwt.verify(token, process.env.JWT_SECRET);
+      console.log(`Token verified for user: ${decoded.email}`);
+    } catch (error) {
+      console.error(`Token verification failed: ${error.message}`);
+    }
+  }
+  
+  next();
+});
+
+// Add or update the summaries endpoint
 app.get('/api/summaries', async (req, res) => {
   try {
     // Get user email from token
     const token = req.headers.authorization?.split(' ')[1];
     if (!token) {
+      console.log('No token provided for /api/summaries');
       return res.status(401).json({ error: 'No authorization token provided' });
     }
     
@@ -483,7 +503,9 @@ app.get('/api/summaries', async (req, res) => {
     try {
       const decoded = jwt.verify(token, process.env.JWT_SECRET);
       userEmail = decoded.email;
+      console.log(`Getting summaries for user: ${userEmail}`);
     } catch (error) {
+      console.error('Invalid token:', error);
       return res.status(401).json({ error: 'Invalid token' });
     }
     
@@ -496,6 +518,8 @@ app.get('/api/summaries', async (req, res) => {
       [userEmail]
     );
     
+    console.log(`Found ${result.rows.length} summaries for user ${userEmail}`);
+    
     // Format the results
     const summaries = result.rows.map(row => ({
       id: row.id,
@@ -505,7 +529,8 @@ app.get('/api/summaries', async (req, res) => {
       createdAt: row.created_at
     }));
     
-    res.json(summaries);
+    // Return an empty array if no summaries found
+    res.json(summaries || []);
   } catch (error) {
     console.error('Error getting summaries:', error);
     res.status(500).json({ 
@@ -1043,6 +1068,78 @@ async function uploadLargeFile(file) {
     }
   }
 }
+
+// Add a usage status endpoint
+app.get('/api/usage-status', async (req, res) => {
+  try {
+    // Get user email from token
+    const token = req.headers.authorization?.split(' ')[1];
+    if (!token) {
+      return res.status(401).json({ error: 'No authorization token provided' });
+    }
+    
+    let userEmail;
+    try {
+      const decoded = jwt.verify(token, process.env.JWT_SECRET);
+      userEmail = decoded.email;
+    } catch (error) {
+      return res.status(401).json({ error: 'Invalid token' });
+    }
+    
+    // Get user information
+    const userResult = await db.query(
+      `SELECT membership_type FROM users WHERE email = $1`,
+      [userEmail]
+    );
+    
+    if (userResult.rows.length === 0) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+    
+    const membershipType = userResult.rows[0].membership_type;
+    
+    // Get usage statistics
+    const usageResult = await db.query(
+      `SELECT COUNT(*) as total_summaries FROM summaries WHERE user_email = $1`,
+      [userEmail]
+    );
+    
+    const totalSummaries = parseInt(usageResult.rows[0].total_summaries) || 0;
+    
+    // Define limits based on membership type
+    const limits = {
+      free: {
+        maxSummaries: 5,
+        maxFileSize: 50 * 1024 * 1024, // 50MB
+        features: ['basic_summaries']
+      },
+      premium: {
+        maxSummaries: 100,
+        maxFileSize: 500 * 1024 * 1024, // 500MB
+        features: ['basic_summaries', 'advanced_summaries', 'pdf_export']
+      }
+    };
+    
+    const userLimits = limits[membershipType] || limits.free;
+    
+    // Return usage information
+    res.json({
+      membershipType,
+      usage: {
+        summaries: totalSummaries,
+        remainingSummaries: Math.max(0, userLimits.maxSummaries - totalSummaries)
+      },
+      limits: userLimits,
+      success: true
+    });
+  } catch (error) {
+    console.error('Error getting usage status:', error);
+    res.status(500).json({ 
+      error: 'Error getting usage status', 
+      details: error.message 
+    });
+  }
+});
 
 // Start the server
 app.listen(PORT, () => {

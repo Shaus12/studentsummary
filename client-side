@@ -1,0 +1,48 @@
+// Example of how to safely handle the summaries response
+function displaySummaries(data) {
+  // Ensure data is an array before using map
+  const summaries = Array.isArray(data) ? data : [];
+  
+  // Now you can safely use map
+  const summaryElements = summaries.map(summary => {
+    // Your mapping logic here
+    return createSummaryElement(summary);
+  });
+  
+  // Add elements to the DOM
+  const container = document.getElementById('summaries-container');
+  container.innerHTML = '';
+  
+  if (summaryElements.length === 0) {
+    container.innerHTML = '<p>No summaries found.</p>';
+  } else {
+    summaryElements.forEach(element => container.appendChild(element));
+  }
+}
+
+// When fetching summaries
+async function fetchSummaries() {
+  try {
+    const token = localStorage.getItem('token');
+    
+    const response = await fetch('/api/summaries', {
+      headers: {
+        'Authorization': `Bearer ${token}`
+      }
+    });
+    
+    if (!response.ok) {
+      throw new Error(`Failed to fetch summaries: ${response.status}`);
+    }
+    
+    const data = await response.json();
+    
+    // Ensure data is an array before processing
+    displaySummaries(Array.isArray(data) ? data : []);
+  } catch (error) {
+    console.error('Error fetching summaries:', error);
+    // Show error message to user
+    document.getElementById('error-message').textContent = 
+      'Failed to load summaries. Please try again later.';
+  }
+} 
