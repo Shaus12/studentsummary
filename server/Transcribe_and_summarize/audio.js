@@ -57,7 +57,7 @@ const convertAudioFormat = async (inputPath) => {
 };
 
 /**
- * Transcribe audio file using Deepgram
+ * Transcribe audio file using Deepgram with Whisper Large model
  * @param {string} audioPath - Path to audio file
  * @param {object} options - Transcription options
  * @returns {Promise<string>} - Transcription text
@@ -65,6 +65,7 @@ const convertAudioFormat = async (inputPath) => {
 export const transcribeAudio = async (audioPath, options = {}) => {
   try {
     console.log(`Transcribing audio file: ${audioPath}`);
+    console.log(`Transcription options:`, options);
     
     // Check if file exists
     if (!fs.existsSync(audioPath)) {
@@ -93,43 +94,51 @@ export const transcribeAudio = async (audioPath, options = {}) => {
     // Read audio file
     const audioBuffer = fs.readFileSync(processedAudioPath);
     
-    // Set up transcription options
+    // Set up transcription options specifically for Hebrew with Whisper Large
     const transcriptionOptions = {
-      punctuate: true,
-      model: 'nova-2',
-      language: options.language || 'en',
-      detect_language: true,
-      diarize: true,
       smart_format: true,
-      utterances: true
+      model: 'whisper-large', // Use Whisper Large model
+      language: 'he', // Explicitly set to Hebrew
+      detect_language: false, // Don't auto-detect, we know it's Hebrew
+      diarize: true,
+      utterances: true,
+      punctuate: true,
+      profanity_filter: false, // Allow all words for accurate transcription
+      tier: 'enhanced' // Use enhanced tier for better quality
     };
     
-    console.log('Sending audio to Deepgram with options:', transcriptionOptions);
+    console.log('Sending audio to Deepgram with Whisper Large model and Hebrew language');
+    console.log('Transcription options:', transcriptionOptions);
     
-    // Send to Deepgram
-    const response = await deepgram.transcription.preRecorded(
-      { buffer: audioBuffer, mimetype: 'audio/mp3' },
+    // Send to Deepgram using the new SDK format
+    const { result, error } = await deepgram.listen.prerecorded.transcribeFile(
+      audioBuffer,
       transcriptionOptions
     );
     
+    if (error) {
+      throw new Error(`Deepgram error: ${error.message}`);
+    }
+    
     // Save the full response for debugging
     const responseOutputPath = path.join(tempDir, `deepgram_response_${Date.now()}.json`);
-    fs.writeFileSync(responseOutputPath, JSON.stringify(response, null, 2));
+    fs.writeFileSync(responseOutputPath, JSON.stringify(result, null, 2));
     console.log(`Saved full Deepgram response to ${responseOutputPath}`);
     
     // Extract transcript
-    if (!response || !response.results || !response.results.channels) {
+    if (!result || !result.results || !result.results.channels) {
       throw new Error('Invalid response from Deepgram');
     }
     
     // Get transcript from the first channel
-    const transcript = response.results.channels[0].alternatives[0].transcript;
+    const transcript = result.results.channels[0].alternatives[0].transcript;
     
     if (!transcript || transcript.trim() === '') {
       throw new Error('No transcript returned from Deepgram');
     }
     
     console.log(`Transcription successful, length: ${transcript.length} characters`);
+    console.log(`Transcript sample: ${transcript.substring(0, 200)}...`);
     
     // Clean up temporary files
     if (processedAudioPath !== audioPath) {
@@ -147,6 +156,10 @@ export const transcribeAudio = async (audioPath, options = {}) => {
       throw new Error('Audio file format is not supported');
     } else if (error.message.includes('empty')) {
       throw new Error('Audio file is empty or contains no audio data');
+    } else if (error.message.includes('language')) {
+      throw new Error('Hebrew language transcription is not supported by the selected model');
+    } else if (error.message.includes('whisper')) {
+      throw new Error('Whisper Large model is not available or not configured correctly');
     } else {
       throw new Error(`Failed to transcribe audio: ${error.message}`);
     }
