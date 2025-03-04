@@ -1,40 +1,194 @@
-import { createClient } from '@deepgram/sdk';
 import fs from 'fs';
+import path from 'path';
+import { Deepgram } from '@deepgram/sdk';
+import { fileURLToPath } from 'url';
+import ffmpeg from 'fluent-ffmpeg';
+import { promisify } from 'util';
+import { cleanupFile } from './utils.js';
 import { summarizeText } from './utils.js';
 
-// Configure Deepgram
-const deepgramApiKey = process.env.DEEPGRAM_API_KEY || '26e3b5fc5fd1451123c9c799ede5d211ff94fce9';
-const deepgram = createClient(deepgramApiKey);
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+const tempDir = path.join(__dirname, '..', 'temp');
+
+// Ensure temp directory exists
+if (!fs.existsSync(tempDir)) {
+  fs.mkdirSync(tempDir, { recursive: true });
+}
+
+// Initialize Deepgram client
+const deepgramApiKey = process.env.DEEPGRAM_API_KEY;
+const deepgram = new Deepgram(deepgramApiKey);
 
 /**
- * Transcribes audio file using Deepgram
- * @param {string} audioPath - Path to audio file
- * @returns {Promise<string>} - Transcribed text
+ * Convert audio file to a format compatible with transcription services
+ * @param {string} inputPath - Path to input audio file
+ * @returns {Promise<string>} - Path to converted audio file
  */
-export async function transcribeAudio(audioPath) {
+const convertAudioFormat = async (inputPath) => {
+  try {
+    console.log(`Converting audio file: ${inputPath}`);
+    
+    // Create output path with mp3 extension
+    const outputPath = path.join(tempDir, `converted_${Date.now()}.mp3`);
+    
+    // Convert using ffmpeg
+    return new Promise((resolve, reject) => {
+      ffmpeg(inputPath)
+        .audioCodec('libmp3lame')
+        .audioBitrate('128k')
+        .audioChannels(1) // Mono for better transcription
+        .audioFrequency(44100)
+        .output(outputPath)
+        .on('end', () => {
+          console.log(`Audio conversion complete: ${outputPath}`);
+          resolve(outputPath);
+        })
+        .on('error', (err) => {
+          console.error('Error converting audio:', err);
+          reject(err);
+        })
+        .run();
+    });
+  } catch (error) {
+    console.error('Error in audio conversion:', error);
+    throw new Error(`Failed to convert audio file: ${error.message}`);
+  }
+};
+
+/**
+ * Transcribe audio file using Deepgram
+ * @param {string} audioPath - Path to audio file
+ * @param {object} options - Transcription options
+ * @returns {Promise<string>} - Transcription text
+ */
+export const transcribeAudio = async (audioPath, options = {}) => {
   try {
     console.log(`Transcribing audio file: ${audioPath}`);
     
-    const audioFile = fs.readFileSync(audioPath);
+    // Check if file exists
+    if (!fs.existsSync(audioPath)) {
+      throw new Error(`Audio file not found: ${audioPath}`);
+    }
     
-    const { result } = await deepgram.listen.prerecorded.transcribeFile(
-      audioFile,
-      {
-        model: 'whisper',
-        language: 'he',
-        smart_format: true,
-      }
+    // Get file stats
+    const stats = fs.statSync(audioPath);
+    console.log(`Audio file size: ${stats.size} bytes`);
+    
+    // Check if file is empty
+    if (stats.size === 0) {
+      throw new Error('Audio file is empty');
+    }
+    
+    // Convert audio to compatible format if needed
+    let processedAudioPath = audioPath;
+    const fileExt = path.extname(audioPath).toLowerCase();
+    const compatibleFormats = ['.mp3', '.wav', '.m4a', '.flac', '.ogg'];
+    
+    if (!compatibleFormats.includes(fileExt)) {
+      console.log(`Converting audio from ${fileExt} to compatible format`);
+      processedAudioPath = await convertAudioFormat(audioPath);
+    }
+    
+    // Read audio file
+    const audioBuffer = fs.readFileSync(processedAudioPath);
+    
+    // Set up transcription options
+    const transcriptionOptions = {
+      punctuate: true,
+      model: 'nova-2',
+      language: options.language || 'en',
+      detect_language: true,
+      diarize: true,
+      smart_format: true,
+      utterances: true
+    };
+    
+    console.log('Sending audio to Deepgram with options:', transcriptionOptions);
+    
+    // Send to Deepgram
+    const response = await deepgram.transcription.preRecorded(
+      { buffer: audioBuffer, mimetype: 'audio/mp3' },
+      transcriptionOptions
     );
     
-    const transcript = result.results.channels[0].alternatives[0].transcript;
-    console.log(`Transcription complete: ${transcript.substring(0, 100)}...`);
+    // Save the full response for debugging
+    const responseOutputPath = path.join(tempDir, `deepgram_response_${Date.now()}.json`);
+    fs.writeFileSync(responseOutputPath, JSON.stringify(response, null, 2));
+    console.log(`Saved full Deepgram response to ${responseOutputPath}`);
+    
+    // Extract transcript
+    if (!response || !response.results || !response.results.channels) {
+      throw new Error('Invalid response from Deepgram');
+    }
+    
+    // Get transcript from the first channel
+    const transcript = response.results.channels[0].alternatives[0].transcript;
+    
+    if (!transcript || transcript.trim() === '') {
+      throw new Error('No transcript returned from Deepgram');
+    }
+    
+    console.log(`Transcription successful, length: ${transcript.length} characters`);
+    
+    // Clean up temporary files
+    if (processedAudioPath !== audioPath) {
+      cleanupFile(processedAudioPath);
+    }
     
     return transcript;
   } catch (error) {
     console.error('Error transcribing audio:', error);
-    throw error;
+    
+    // Provide more specific error messages
+    if (error.message.includes('API key')) {
+      throw new Error('Transcription service API key is invalid or missing');
+    } else if (error.message.includes('format')) {
+      throw new Error('Audio file format is not supported');
+    } else if (error.message.includes('empty')) {
+      throw new Error('Audio file is empty or contains no audio data');
+    } else {
+      throw new Error(`Failed to transcribe audio: ${error.message}`);
+    }
   }
-}
+};
+
+/**
+ * Process uploaded audio file
+ * @param {string} filePath - Path to uploaded audio file
+ * @param {object} options - Processing options
+ * @returns {Promise<object>} - Processing result
+ */
+export const processAudioFile = async (filePath, options = {}) => {
+  try {
+    console.log(`Processing uploaded audio file: ${filePath}`);
+    
+    // Transcribe the audio
+    const transcription = await transcribeAudio(filePath, options);
+    
+    // Return the transcription or summary based on options
+    if (options.outputType === 'transcription') {
+      return {
+        transcription,
+        success: true
+      };
+    } else if (options.outputType === 'summary') {
+      // Generate summary
+      const summary = await summarizeText(transcription, options.summaryOptions || {});
+      
+      return {
+        summary,
+        transcription: options.includeTranscription ? transcription : undefined,
+        success: true
+      };
+    } else {
+      throw new Error('Invalid output type specified');
+    }
+  } catch (error) {
+    console.error('Error processing audio file:', error);
+    throw new Error(`Failed to process audio file: ${error.message}`);
+  }
+};
 
 /**
  * Processes uploaded audio/video file

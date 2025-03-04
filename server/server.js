@@ -22,6 +22,7 @@ import { createClient } from '@deepgram/sdk';
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import fs from 'fs';
 import puppeteer from 'puppeteer';
+import { processAudioFile } from './Transcribe_and_summarize/audio.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -70,24 +71,29 @@ try {
   console.error('Database connection error:', err);
 }
 
-// Configure multer for file uploads
+// Set up multer for file uploads
 const storage = multer.diskStorage({
   destination: function (req, file, cb) {
-    cb(null, path.join(__dirname, 'temp')) // Save to temp directory
+    cb(null, path.join(__dirname, 'temp'));
   },
   filename: function (req, file, cb) {
-    cb(null, Date.now() + '-' + file.originalname) // Add timestamp to filename
+    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
+    cb(null, 'upload_' + uniqueSuffix + path.extname(file.originalname));
   }
 });
 
 const upload = multer({ 
   storage: storage,
+  limits: {
+    fileSize: 100 * 1024 * 1024, // 100MB max file size
+  },
   fileFilter: (req, file, cb) => {
-    // Accept only audio files
-    if (file.mimetype.startsWith('audio/')) {
+    // Accept audio files only
+    if (file.mimetype.startsWith('audio/') || 
+        file.originalname.match(/\.(mp3|wav|m4a|flac|ogg|aac)$/)) {
       cb(null, true);
     } else {
-      cb(new Error('Only audio files are allowed!'));
+      cb(new Error('Only audio files are allowed!'), false);
     }
   }
 });
@@ -672,6 +678,41 @@ app.get('/api/usage-status', authenticateToken, async (req, res) => {
   } catch (error) {
     console.error('Error getting usage status:', error);
     res.status(500).json({ error: 'Failed to get usage status' });
+  }
+});
+
+// Add this endpoint to your Express app
+app.post('/api/transcribe/upload', authenticateToken, upload.single('audioFile'), async (req, res) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({ error: 'No audio file uploaded' });
+    }
+    
+    console.log(`Audio file uploaded: ${req.file.path}`);
+    console.log(`Original filename: ${req.file.originalname}`);
+    console.log(`File size: ${req.file.size} bytes`);
+    
+    // Get processing options from request body
+    const options = {
+      outputType: req.body.outputType || 'transcription',
+      includeTranscription: req.body.includeTranscription === 'true',
+      language: req.body.language || 'en',
+      summaryOptions: req.body.summaryOptions ? JSON.parse(req.body.summaryOptions) : {}
+    };
+    
+    console.log('Processing options:', options);
+    
+    // Process the uploaded file
+    const result = await processAudioFile(req.file.path, options);
+    
+    // Clean up the uploaded file
+    fs.unlinkSync(req.file.path);
+    
+    // Return the result
+    res.json(result);
+  } catch (error) {
+    console.error('Error processing uploaded audio:', error);
+    res.status(500).json({ error: error.message });
   }
 });
 
