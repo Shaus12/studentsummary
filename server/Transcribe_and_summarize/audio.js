@@ -62,7 +62,7 @@ const convertAudioFormat = async (inputPath) => {
  * @param {object} options - Transcription options
  * @returns {Promise<string>} - Transcription text
  */
-async function transcribeAudio(filePath, language) {
+export async function transcribeAudio(filePath, language) {
   try {
     console.log(`Transcribing audio file: ${filePath} with language: ${language}`);
     
