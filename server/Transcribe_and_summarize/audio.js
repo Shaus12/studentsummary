@@ -62,102 +62,107 @@ const convertAudioFormat = async (inputPath) => {
  * @param {object} options - Transcription options
  * @returns {Promise<string>} - Transcription text
  */
-export const transcribeAudio = async (audioPath, options = {}) => {
+export async function transcribeAudio(audioFilePath, options = {}) {
   try {
-    console.log(`Transcribing audio file: ${audioPath}`);
-    console.log(`Transcription options:`, options);
-    
+    console.log('Transcribing audio file:', audioFilePath);
+    console.log('Transcription options:', options);
+
     // Check if file exists
-    if (!fs.existsSync(audioPath)) {
-      throw new Error(`Audio file not found: ${audioPath}`);
+    if (!fs.existsSync(audioFilePath)) {
+      throw new Error(`Audio file not found: ${audioFilePath}`);
     }
-    
-    // Get file stats
-    const stats = fs.statSync(audioPath);
-    console.log(`Audio file size: ${stats.size} bytes`);
-    
-    // Check if file is empty
-    if (stats.size === 0) {
-      throw new Error('Audio file is empty');
-    }
-    
-    // Convert audio to compatible format if needed
-    let processedAudioPath = audioPath;
-    const fileExt = path.extname(audioPath).toLowerCase();
-    const compatibleFormats = ['.mp3', '.wav', '.m4a', '.flac', '.ogg'];
-    
-    if (!compatibleFormats.includes(fileExt)) {
-      console.log(`Converting audio from ${fileExt} to compatible format`);
-      processedAudioPath = await convertAudioFormat(audioPath);
-    }
-    
-    // Read audio file
-    const audioBuffer = fs.readFileSync(processedAudioPath);
-    
-    // Set up transcription options specifically for Hebrew with Whisper Large
+
+    // Get file size
+    const stats = fs.statSync(audioFilePath);
+    console.log('Audio file size:', stats.size, 'bytes');
+
+    // Read the audio file
+    const audioBuffer = fs.readFileSync(audioFilePath);
+
+    // Configure Deepgram request
     const transcriptionOptions = {
-      model: "whisper-large",
-      language: "he",
+      model: 'whisper-large',
+      language: 'he',
       detect_language: false,
       diarize: true,
       smart_format: true,
       utterances: true,
-      punctuate: true
+      punctuate: true,
+      ...options
     };
-    
+
     console.log('Sending audio to Deepgram with Whisper Large model and Hebrew language');
     console.log('Transcription options:', transcriptionOptions);
-    
-    // Use the new SDK format for transcription
-    const response = await deepgram.listen.prerecorded.transcribeFile(audioBuffer, transcriptionOptions);
-    
-    // Save the full response for debugging
-    const responseOutputPath = path.join(tempDir, `deepgram_response_${Date.now()}.json`);
-    fs.writeFileSync(responseOutputPath, JSON.stringify(response, null, 2));
-    console.log(`Saved full Deepgram response to ${responseOutputPath}`);
-    
-    // Extract transcript from the new response format
-    if (!response || !response.results || !response.results.channels || 
-        !response.results.channels[0] || !response.results.channels[0].alternatives || 
-        !response.results.channels[0].alternatives[0]) {
-      throw new Error('Invalid response from Deepgram');
+
+    try {
+      // Create a Deepgram client
+      const deepgramApiKey = process.env.DEEPGRAM_API_KEY || '2a60d94169738ee178d20bb606126fdd56c85710';
+      const deepgram = createClient(deepgramApiKey);
+
+      // Send the audio to Deepgram
+      const response = await deepgram.listen.prerecorded.transcribeFile(
+        audioBuffer,
+        transcriptionOptions
+      );
+
+      // Save the full response for debugging
+      const responseFilePath = path.join(
+        path.dirname(audioFilePath),
+        `deepgram_response_${Date.now()}.json`
+      );
+      fs.writeFileSync(responseFilePath, JSON.stringify(response, null, 2));
+      console.log(`Saved full Deepgram response to ${responseFilePath}`);
+
+      // Check if response has the expected structure
+      if (!response || !response.results || !response.results.channels) {
+        console.error('Unexpected Deepgram response structure:', JSON.stringify(response));
+        throw new Error('Invalid response from Deepgram');
+      }
+
+      // Extract the transcript
+      let transcript = '';
+      
+      // Try to get the transcript from the response
+      try {
+        // First try the standard path
+        if (response.results.channels[0].alternatives[0].transcript) {
+          transcript = response.results.channels[0].alternatives[0].transcript;
+        } 
+        // If that fails, try to get it from utterances
+        else if (response.results.utterances && response.results.utterances.length > 0) {
+          transcript = response.results.utterances.map(u => u.transcript).join(' ');
+        }
+        // If both fail, throw an error
+        else {
+          throw new Error('No transcript found in Deepgram response');
+        }
+      } catch (extractError) {
+        console.error('Error extracting transcript from Deepgram response:', extractError);
+        console.error('Response structure:', JSON.stringify(response));
+        throw new Error('Failed to extract transcript from Deepgram response');
+      }
+
+      if (!transcript) {
+        throw new Error('Empty transcript from Deepgram');
+      }
+
+      console.log('Transcription successful');
+      return transcript;
+    } catch (deepgramError) {
+      console.error('Error with Deepgram API:', deepgramError);
+      
+      // Try an alternative transcription method if Deepgram fails
+      console.log('Attempting alternative transcription method...');
+      
+      // Here you could implement a fallback to another service
+      // For now, we'll just throw the error
+      throw new Error(`Failed to transcribe with Deepgram: ${deepgramError.message}`);
     }
-    
-    // Get transcript from the first channel
-    const transcript = response.results.channels[0].alternatives[0].transcript;
-    
-    if (!transcript || transcript.trim() === '') {
-      throw new Error('No transcript returned from Deepgram');
-    }
-    
-    console.log(`Transcription successful, length: ${transcript.length} characters`);
-    console.log(`Transcript sample: ${transcript.substring(0, 200)}...`);
-    
-    // Clean up temporary files
-    if (processedAudioPath !== audioPath) {
-      cleanupFile(processedAudioPath);
-    }
-    
-    return transcript;
   } catch (error) {
     console.error('Error transcribing audio:', error);
-    
-    // Provide more specific error messages
-    if (error.message.includes('API key')) {
-      throw new Error('Transcription service API key is invalid or missing');
-    } else if (error.message.includes('format')) {
-      throw new Error('Audio file format is not supported');
-    } else if (error.message.includes('empty')) {
-      throw new Error('Audio file is empty or contains no audio data');
-    } else if (error.message.includes('language')) {
-      throw new Error('Hebrew language transcription is not supported by the selected model');
-    } else if (error.message.includes('whisper')) {
-      throw new Error('Whisper Large model is not available or not configured correctly');
-    } else {
-      throw new Error(`Failed to transcribe audio: ${error.message}`);
-    }
+    throw new Error(`Failed to transcribe audio: ${error.message}`);
   }
-};
+}
 
 /**
  * Process uploaded audio file
