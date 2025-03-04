@@ -101,23 +101,30 @@ export async function transcribeAudio(filePath, language) {
     // Create a source from the file buffer
     const source = {
       buffer: audioFile,
-      mimetype: 'audio/mpeg' // Adjust based on your file type
+      mimetype: 'audio/mp3' // Explicitly set to audio/mp3
     };
     
     // Use the v3 SDK format for transcription
     const response = await deepgram.listen.prerecorded.transcribeFile(source, options);
     
+    // Check for error in the response
+    if (response.error) {
+      console.error("Deepgram API returned an error:", response.error);
+      throw new Error(`Deepgram API error: ${response.error.message}`);
+    }
+    
     // Extract transcript from the response
     let transcript = '';
     let paragraphs = [];
     
-    if (response && response.results && response.results.channels && response.results.channels.length > 0) {
+    if (response && response.result && response.result.results && 
+        response.result.results.channels && response.result.results.channels.length > 0) {
       // Extract the full transcript
-      transcript = response.results.channels[0].alternatives[0]?.transcript || '';
+      transcript = response.result.results.channels[0].alternatives[0]?.transcript || '';
       
       // Extract paragraphs/utterances if available
-      if (response.results.utterances && response.results.utterances.length > 0) {
-        paragraphs = response.results.utterances.map(utterance => ({
+      if (response.result.results.utterances && response.result.results.utterances.length > 0) {
+        paragraphs = response.result.results.utterances.map(utterance => ({
           text: utterance.transcript,
           start: utterance.start,
           end: utterance.end,
@@ -129,7 +136,13 @@ export async function transcribeAudio(filePath, language) {
       }
     } else {
       console.error("Unexpected response structure from Deepgram:", JSON.stringify(response));
-      throw new Error("Invalid response structure from Deepgram");
+      
+      // If there's an error in the response, extract it
+      if (response.error) {
+        throw new Error(`Deepgram error: ${response.error.message}`);
+      } else {
+        throw new Error("Invalid response structure from Deepgram");
+      }
     }
     
     return { transcript, paragraphs };
