@@ -5,6 +5,11 @@ import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import dotenv from 'dotenv';
+import { exec } from 'child_process';
+import { promisify } from 'util';
+
+// Promisify exec
+const execAsync = promisify(exec);
 
 // Load environment variables
 dotenv.config();
@@ -26,17 +31,60 @@ const deepgram = createClient(deepgramApiKey);
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 
 /**
+ * Convert audio file to a format Deepgram can handle
+ * @param {string} filePath - Path to the audio file
+ * @returns {Promise<string>} - Path to the converted file
+ */
+async function convertAudioFile(filePath) {
+  try {
+    // Create output path with wav extension
+    const outputPath = filePath.replace(/\.[^/.]+$/, '') + '_converted.wav';
+    
+    console.log(`Converting audio file from ${filePath} to ${outputPath}`);
+    
+    // Use ffmpeg to convert the file to WAV format
+    await execAsync(`ffmpeg -i "${filePath}" -acodec pcm_s16le -ar 16000 -ac 1 "${outputPath}"`);
+    
+    console.log(`Converted audio file to: ${outputPath}`);
+    return outputPath;
+  } catch (error) {
+    console.error("Error converting audio file:", error);
+    throw error;
+  }
+}
+
+/**
+ * Clean up a file
+ * @param {string} filePath - Path to the file to clean up
+ */
+async function cleanupFile(filePath) {
+  try {
+    if (fs.existsSync(filePath)) {
+      fs.unlinkSync(filePath);
+      console.log(`Cleaned up file: ${filePath}`);
+    }
+  } catch (error) {
+    console.error(`Error cleaning up file ${filePath}:`, error);
+  }
+}
+
+/**
  * Transcribe audio file using Deepgram
  * @param {string} filePath - Path to audio file
  * @returns {Promise<string>} - Transcription text
  */
 export async function transcribeAudio(filePath) {
+  let convertedFilePath = null;
+  
   try {
     console.log(`Transcribing audio file: ${filePath}`);
     console.log(`Using Deepgram API key: ${deepgramApiKey?.substring(0, 5)}...`);
     
-    // Read the audio file
-    const audioFile = fs.readFileSync(filePath);
+    // Convert the audio file to a format Deepgram can handle
+    convertedFilePath = await convertAudioFile(filePath);
+    
+    // Read the converted audio file
+    const audioFile = fs.readFileSync(convertedFilePath);
     
     // Configure Deepgram options
     const options = {
@@ -48,11 +96,16 @@ export async function transcribeAudio(filePath) {
       language: 'he'
     };
     
+    console.log(`Sending request to Deepgram with options:`, options);
+    
     // Send to Deepgram for transcription
     const response = await deepgram.listen.prerecorded.transcribeFile(
-      { buffer: audioFile, mimetype: 'audio/mp3' },
+      { buffer: audioFile, mimetype: 'audio/wav' },
       options
     );
+    
+    // Clean up the converted file
+    await cleanupFile(convertedFilePath);
     
     // Check if response is valid
     if (!response || !response.results) {
@@ -67,6 +120,12 @@ export async function transcribeAudio(filePath) {
     return transcript;
   } catch (error) {
     console.error('Error transcribing audio:', error);
+    
+    // Clean up the converted file if it exists
+    if (convertedFilePath) {
+      await cleanupFile(convertedFilePath);
+    }
+    
     return "אירעה שגיאה בתמלול הקובץ. אנא נסה שוב מאוחר יותר.";
   }
 }
