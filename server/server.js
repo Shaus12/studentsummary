@@ -498,10 +498,14 @@ app.post('/api/process-audio', upload.any(), async (req, res) => {
     console.log('Summary saved with ID:', summaryId);
     
     // Return the result
-    res.json({
-      id: summaryId,
-      summary: result.summary,
-      success: true
+    res.status(200).json({
+      success: true,
+      message: 'Audio processed successfully',
+      data: {
+        transcription: result.transcription,
+        summary: result.summary,
+        summaryId: summaryId
+      }
     });
   } catch (error) {
     console.error('Error processing audio file:', error);
