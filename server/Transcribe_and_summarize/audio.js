@@ -62,10 +62,10 @@ const convertAudioFormat = async (inputPath) => {
 };
 
 /**
- * Transcribe audio file using Deepgram with Whisper Large model
+ * Transcribe audio file using Deepgram with the latest SDK format
  * @param {string} audioPath - Path to audio file
  * @param {object} options - Transcription options
- * @returns {Promise<string>} - Transcription text
+ * @returns {Promise<object>} - Transcription response
  */
 export async function transcribeAudio(filePath, language = 'auto') {
   try {
@@ -78,7 +78,6 @@ export async function transcribeAudio(filePath, language = 'auto') {
     const audioFile = await fs.promises.readFile(convertedFilePath);
     
     // Configure Deepgram options
-    // If the language is Hebrew, specify it
     const options = {
       smart_format: true,
       model: "nova-2",
@@ -94,11 +93,15 @@ export async function transcribeAudio(filePath, language = 'auto') {
     
     console.log(`Sending request to Deepgram with options:`, options);
     
-    // Send to Deepgram for transcription
-    const response = await deepgram.transcription.preRecorded(
-      { buffer: audioFile, mimetype: 'audio/wav' },
-      options
-    );
+    // Use the new SDK format
+    // Create a source from the audio buffer
+    const source = {
+      buffer: audioFile,
+      mimetype: 'audio/wav'
+    };
+    
+    // Send to Deepgram for transcription using the new format
+    const response = await deepgram.listen.prerecorded.transcribeFile(source, options);
     
     // Clean up the converted file
     await cleanupFile(convertedFilePath);
@@ -185,10 +188,35 @@ export async function processUploadedFile(filePath, options = {}) {
     console.log(`Processing uploaded file: ${filePath}`);
     
     // Step 1: Transcribe the audio
-    const transcription = await transcribeAudio(filePath, options.language || 'auto');
+    const transcriptionResponse = await transcribeAudio(filePath, options.language || 'auto');
 
-    // Step 2: Break transcription into chunks
-    const words = transcription.results.channels[0].alternatives[0].transcript.split(" ");
+    // Step 2: Extract transcript from the new response format
+    // The structure might be different in the new SDK
+    let transcript = '';
+    
+    try {
+      // Try to extract transcript from the new response format
+      transcript = transcriptionResponse.results?.channels[0]?.alternatives[0]?.transcript || '';
+      
+      // If that fails, try other possible formats
+      if (!transcript && transcriptionResponse.results?.utterances) {
+        transcript = transcriptionResponse.results.utterances.map(u => u.transcript).join(' ');
+      }
+      
+      // If still no transcript, check if there's a direct transcript property
+      if (!transcript && transcriptionResponse.transcript) {
+        transcript = transcriptionResponse.transcript;
+      }
+      
+      console.log(`Extracted transcript of length: ${transcript.length}`);
+    } catch (error) {
+      console.error('Error extracting transcript from response:', error);
+      console.log('Response structure:', JSON.stringify(transcriptionResponse));
+      transcript = 'Failed to extract transcript from response.';
+    }
+
+    // Step 3: Break transcription into chunks
+    const words = transcript.split(" ");
     const chunkSize = 1500;
     const chunks = [];
 
@@ -196,7 +224,7 @@ export async function processUploadedFile(filePath, options = {}) {
       chunks.push(words.slice(i, i + chunkSize).join(" "));
     }
 
-    // Step 3: Summarize each chunk
+    // Step 4: Summarize each chunk
     const summaries = [];
     for (const [index, chunk] of chunks.entries()) {
       console.log(`Summarizing chunk ${index + 1}/${chunks.length}...`);
@@ -204,11 +232,11 @@ export async function processUploadedFile(filePath, options = {}) {
       summaries.push(summary);
     }
 
-    // Step 4: Combine all summaries into a final summary
+    // Step 5: Combine all summaries into a final summary
     const finalSummary = await summarizeText(summaries.join(" "), options);
     console.log("הנה הסיכום שלך:", finalSummary);
 
-    // Step 5: Generate PDF if requested
+    // Step 6: Generate PDF if requested
     let pdfPath = null;
     if (options.outputType === 'pdf') {
       const { generatePDF } = await import('./pdf.js');
