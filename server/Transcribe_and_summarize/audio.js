@@ -83,7 +83,7 @@ export async function transcribeAudio(filePath, language = 'auto') {
     // Configure Deepgram options with Whisper Large model
     const options = {
       smart_format: true,
-      model: "whisper-large",  // Use Whisper Large model
+      model: "whisper",  // Use Whisper Large model
       diarize: true,
       utterances: true,
       punctuate: true,
