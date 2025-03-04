@@ -15,31 +15,48 @@ const deepgram = createClient(deepgramApiKey);
 // Configure Gemini
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || 'AIzaSyCzIsCmQVuaiUKd0TqaIctPVZ0Bj_3i11A');
 
-// Function to transcribe audio
-export async function transcribeAudio(audioPath) {
+/**
+ * Transcribe audio file using Deepgram
+ * @param {string} filePath - Path to audio file
+ * @returns {Promise<string>} - Transcription text
+ */
+export async function transcribeAudio(filePath) {
   try {
-    console.log(`Transcribing audio file: ${audioPath}`);
+    console.log(`Transcribing audio file: ${filePath}`);
     
     // Read the audio file
-    const audioFile = fs.readFileSync(audioPath);
+    const audioFile = fs.readFileSync(filePath);
     
-    // Transcribe with Deepgram
-    const { result } = await deepgram.listen.prerecorded.transcribeFile(
-      audioFile,
-      {
-        model: 'whisper',
-        language: 'he',
-        smart_format: true,
-      }
+    // Configure Deepgram options
+    const options = {
+      smart_format: true,
+      model: "whisper-large",
+      diarize: true,
+      utterances: true,
+      punctuate: true,
+      language: 'he'
+    };
+    
+    // Send to Deepgram for transcription
+    const response = await deepgram.listen.prerecorded.transcribeFile(
+      { buffer: audioFile, mimetype: 'audio/mp3' },
+      options
     );
     
-    const transcript = result.results.channels[0].alternatives[0].transcript;
-    console.log(`Transcription complete: ${transcript.substring(0, 100)}...`);
+    // Check if response is valid
+    if (!response || !response.results) {
+      console.error('Invalid Deepgram response:', response);
+      return "לא ניתן היה לתמלל את הקובץ. אנא ודא שהקובץ תקין ונסה שוב.";
+    }
+    
+    // Extract transcript
+    const transcript = response.results.channels[0].alternatives[0].transcript;
+    console.log(`Transcription complete, length: ${transcript.length}`);
     
     return transcript;
   } catch (error) {
     console.error('Error transcribing audio:', error);
-    throw error;
+    return "אירעה שגיאה בתמלול הקובץ. אנא נסה שוב מאוחר יותר.";
   }
 }
 

@@ -18,6 +18,18 @@ import { v4 as uuidv4 } from 'uuid';
 // Import the working audio processing functions
 import { transcribeAudio, summarizeText, generatePDF } from './Transcribe_and_summarize/audioProcessing.js';
 
+// Define cleanupFile function
+async function cleanupFile(filePath) {
+  try {
+    if (filePath && fs.existsSync(filePath)) {
+      await unlink(filePath);
+      console.log(`Cleaned up file: ${filePath}`);
+    }
+  } catch (error) {
+    console.error(`Error cleaning up file ${filePath}:`, error);
+  }
+}
+
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
