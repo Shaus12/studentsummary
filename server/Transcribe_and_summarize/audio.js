@@ -7,6 +7,8 @@ import { promisify } from 'util';
 import { cleanupFile } from './utils.js';
 import { summarizeText } from './utils.js';
 import { exec } from 'child_process';
+import http from 'http';
+import https from 'https';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -78,8 +80,6 @@ export async function transcribeAudio(filePath, language) {
     const convertedFilePath = await convertAudioFile(filePath);
     console.log(`Converted audio file to: ${convertedFilePath}`);
     
-    const audioFile = fs.readFileSync(convertedFilePath);
-    
     // Determine the appropriate language parameter based on the input
     let deepgramLanguage = language;
     if (language === 'auto') {
@@ -105,14 +105,52 @@ export async function transcribeAudio(filePath, language) {
     // Create the Deepgram client using the v3 SDK format
     const deepgram = createClient(process.env.DEEPGRAM_API_KEY);
     
-    // Create a source from the file buffer
-    const source = {
-      buffer: audioFile,
-      mimetype: 'audio/wav' // Use WAV format which is widely supported
-    };
+    // Try a different approach - use the REST API directly
+    const fileStats = fs.statSync(convertedFilePath);
+    const fileSize = fileStats.size;
     
-    // Use the v3 SDK format for transcription
-    const response = await deepgram.listen.prerecorded.transcribeFile(source, options);
+    // Read the file as a buffer
+    const audioBuffer = fs.readFileSync(convertedFilePath);
+    
+    // Make a direct API call to Deepgram
+    const url = 'https://api.deepgram.com/v1/listen';
+    
+    // Create a promise to handle the HTTP request
+    const response = await new Promise((resolve, reject) => {
+      const req = https.request(
+        url,
+        {
+          method: 'POST',
+          headers: {
+            'Authorization': `Token ${process.env.DEEPGRAM_API_KEY}`,
+            'Content-Type': 'audio/wav',
+            'Content-Length': fileSize
+          }
+        },
+        (res) => {
+          let data = '';
+          res.on('data', (chunk) => {
+            data += chunk;
+          });
+          res.on('end', () => {
+            try {
+              const jsonResponse = JSON.parse(data);
+              resolve(jsonResponse);
+            } catch (e) {
+              reject(new Error(`Failed to parse Deepgram response: ${e.message}`));
+            }
+          });
+        }
+      );
+      
+      req.on('error', (error) => {
+        reject(error);
+      });
+      
+      // Write the audio buffer to the request
+      req.write(audioBuffer);
+      req.end();
+    });
     
     // Clean up the converted file if it's different from the original
     if (convertedFilePath !== filePath && fs.existsSync(convertedFilePath)) {
@@ -120,24 +158,19 @@ export async function transcribeAudio(filePath, language) {
       console.log(`Cleaned up temporary converted file: ${convertedFilePath}`);
     }
     
-    // Check for error in the response
-    if (response.error) {
-      console.error("Deepgram API returned an error:", response.error);
-      throw new Error(`Deepgram API error: ${response.error.message}`);
-    }
+    console.log("Deepgram response:", JSON.stringify(response));
     
     // Extract transcript from the response
     let transcript = '';
     let paragraphs = [];
     
-    if (response && response.result && response.result.results && 
-        response.result.results.channels && response.result.results.channels.length > 0) {
+    if (response && response.results && response.results.channels && response.results.channels.length > 0) {
       // Extract the full transcript
-      transcript = response.result.results.channels[0].alternatives[0]?.transcript || '';
+      transcript = response.results.channels[0].alternatives[0]?.transcript || '';
       
       // Extract paragraphs/utterances if available
-      if (response.result.results.utterances && response.result.results.utterances.length > 0) {
-        paragraphs = response.result.results.utterances.map(utterance => ({
+      if (response.results.utterances && response.results.utterances.length > 0) {
+        paragraphs = response.results.utterances.map(utterance => ({
           text: utterance.transcript,
           start: utterance.start,
           end: utterance.end,
@@ -152,7 +185,7 @@ export async function transcribeAudio(filePath, language) {
       
       // If there's an error in the response, extract it
       if (response.error) {
-        throw new Error(`Deepgram error: ${response.error.message}`);
+        throw new Error(`Deepgram error: ${JSON.stringify(response.error)}`);
       } else {
         throw new Error("Invalid response structure from Deepgram");
       }
@@ -191,8 +224,8 @@ async function convertAudioFile(filePath) {
     
     console.log(`Converting audio file from ${filePath} to ${outputPath}`);
     
-    // Use ffmpeg to convert the file to WAV format
-    await execPromise(`ffmpeg -i "${filePath}" -ar 16000 -ac 1 -c:a pcm_s16le "${outputPath}"`);
+    // Use ffmpeg to convert the file to WAV format with more specific parameters
+    await execPromise(`ffmpeg -i "${filePath}" -acodec pcm_s16le -ac 1 -ar 16000 "${outputPath}"`);
     
     return outputPath;
   } catch (error) {
