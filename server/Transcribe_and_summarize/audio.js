@@ -6,7 +6,6 @@ import ffmpeg from 'fluent-ffmpeg';
 import { promisify } from 'util';
 import { cleanupFile } from './utils.js';
 import { summarizeText } from './utils.js';
-import Deepgram from '@deepgram/sdk';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -63,7 +62,7 @@ const convertAudioFormat = async (inputPath) => {
  * @param {object} options - Transcription options
  * @returns {Promise<string>} - Transcription text
  */
-export async function transcribeAudio(filePath, language) {
+async function transcribeAudio(filePath, language) {
   try {
     console.log(`Transcribing audio file: ${filePath} with language: ${language}`);
     
@@ -96,8 +95,8 @@ export async function transcribeAudio(filePath, language) {
     
     console.log("Sending request to Deepgram with options:", JSON.stringify(options));
     
-    // Use the new format for Deepgram SDK v3
-    const deepgram = new Deepgram(process.env.DEEPGRAM_API_KEY);
+    // Create the Deepgram client using the v3 SDK format
+    const deepgram = createClient(process.env.DEEPGRAM_API_KEY);
     
     // Create a source from the file buffer
     const source = {
