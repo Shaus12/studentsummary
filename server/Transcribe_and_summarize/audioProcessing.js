@@ -93,10 +93,10 @@ export async function transcribeAudio(filePath) {
     const audioFile = fs.readFileSync(convertedFilePath);
     console.log(`Converted file size: ${audioFile.length} bytes`);
     
-    // Configure Deepgram options
+    // Configure Deepgram options for Whisper with Hebrew
     const options = {
       smart_format: true,
-      model: "whisper-large",  // Using Whisper model for Hebrew language support
+      model: "whisper",  // Just "whisper" instead of "whisper-large"
       diarize: true,
       utterances: true,
       punctuate: true,
@@ -107,7 +107,7 @@ export async function transcribeAudio(filePath) {
     
     // Send to Deepgram for transcription
     const response = await deepgram.listen.prerecorded.transcribeFile(
-      { buffer: audioFile, mimetype: 'audio/mp3' },  // Use MP3 mimetype
+      { buffer: audioFile, mimetype: 'audio/mp3' },
       options
     );
     
