@@ -374,7 +374,10 @@ app.post('/api/upload-audio', upload.single('audioFile'), async (req, res) => {
     
     // Process the uploaded file using the working implementation
     const transcript = await transcribeAudio(req.file.path);
+    console.log(`Transcript received, length: ${transcript.length}`);
+    
     const summary = await summarizeText(transcript);
+    console.log(`Summary generated, length: ${summary.length}`);
     
     // Generate PDF if requested
     let pdfPath = null;
@@ -390,31 +393,23 @@ app.post('/api/upload-audio', upload.single('audioFile'), async (req, res) => {
     
     console.log('File processed successfully');
     
-    // Get user email from token
-    const token = req.headers.authorization?.split(' ')[1];
-    if (!token) {
-      return res.status(401).json({ error: 'No authorization token provided' });
-    }
-    
-    let userEmail;
-    try {
-      const decoded = jwt.verify(token, process.env.JWT_SECRET);
-      userEmail = decoded.email;
-    } catch (error) {
-      return res.status(401).json({ error: 'Invalid token' });
-    }
+    // Get user ID from req.user (set by auth middleware)
+    const userId = req.user.id;
     
     // Save the result to the database
     console.log('Saving result to database');
     const summaryResult = await db.query(
-      `INSERT INTO summaries (user_email, summary, created_at, file_name)
+      `INSERT INTO summaries (user_id, summary, created_at, file_name)
        VALUES ($1, $2, NOW(), $3)
        RETURNING id`,
-      [userEmail, result.summary, req.file.originalname]
+      [userId, result.summary, req.file.originalname]
     );
     
     const summaryId = summaryResult.rows[0].id;
     console.log('Summary saved with ID:', summaryId);
+    
+    // Clean up the uploaded file
+    await cleanupFile(req.file.path);
     
     // Send the response
     res.json({
@@ -425,6 +420,12 @@ app.post('/api/upload-audio', upload.single('audioFile'), async (req, res) => {
     });
   } catch (error) {
     console.error('Error processing audio file:', error);
+    
+    // Clean up the uploaded file if it exists
+    if (req.file && req.file.path) {
+      await cleanupFile(req.file.path);
+    }
+    
     res.status(500).json({ 
       error: 'Failed to process audio file', 
       details: error.message 

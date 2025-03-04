@@ -8,11 +8,11 @@ import { fileURLToPath } from 'url';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-// Configure Deepgram
+// Configure Deepgram with the correct API key
 const deepgramApiKey = process.env.DEEPGRAM_API_KEY || '26e3b5fc5fd1451123c9c799ede5d211ff94fce9';
 const deepgram = createClient(deepgramApiKey);
 
-// Configure Gemini
+// Configure Gemini with the correct API key and model
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || 'AIzaSyCzIsCmQVuaiUKd0TqaIctPVZ0Bj_3i11A');
 
 /**
@@ -66,7 +66,7 @@ export async function summarizeText(text) {
     console.log(`Summarizing text of length: ${text.length}`);
     
     // Use Gemini to summarize
-    const model = genAI.getGenerativeModel({ model: "gemini-pro" });
+    const model = genAI.getGenerativeModel({ model: "gemini-1.5-pro" });
     
     const prompt = `
     Please summarize the following Hebrew text in Hebrew. 
@@ -84,7 +84,7 @@ export async function summarizeText(text) {
     return summary;
   } catch (error) {
     console.error('Error summarizing text:', error);
-    throw error;
+    return "אירעה שגיאה בסיכום הטקסט. אנא נסה שוב מאוחר יותר.";
   }
 }
 
