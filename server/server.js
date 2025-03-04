@@ -423,16 +423,21 @@ app.post('/api/upload-audio', upload.single('audio'), async (req, res) => {
   }
 });
 
-// Add the process-audio endpoint
-app.post('/api/process-audio', upload.single('audio'), async (req, res) => {
+// Update the process-audio endpoint to accept any field name
+app.post('/api/process-audio', upload.any(), async (req, res) => {
   try {
     console.log('Audio processing request received');
+    console.log('Files:', req.files);
+    console.log('Body:', req.body);
     
-    if (!req.file) {
+    // Check if any files were uploaded
+    if (!req.files || req.files.length === 0) {
       return res.status(400).json({ error: 'No audio file uploaded' });
     }
     
-    console.log('File uploaded for processing:', req.file);
+    // Use the first uploaded file
+    const uploadedFile = req.files[0];
+    console.log('File uploaded for processing:', uploadedFile);
     
     // Get user email from token
     const token = req.headers.authorization?.split(' ')[1];
@@ -452,22 +457,45 @@ app.post('/api/process-audio', upload.single('audio'), async (req, res) => {
     const usageCheck = await checkAndUpdateUsage(userEmail);
     if (!usageCheck.allowed) {
       // Clean up the uploaded file
-      await unlink(req.file.path);
+      await unlink(uploadedFile.path);
       return res.status(403).json({ error: 'Usage limit exceeded' });
     }
     
-    // Process the uploaded file
-    const result = await processUploadedFile(req.file.path, 'summary');
+    // Process the uploaded file with better error handling
+    let result;
+    try {
+      console.log('Starting to process file:', uploadedFile.path);
+      
+      // Check if the file exists
+      if (!fs.existsSync(uploadedFile.path)) {
+        throw new Error(`File not found: ${uploadedFile.path}`);
+      }
+      
+      // Try to process the file
+      result = await processUploadedFile(uploadedFile.path, 'summary');
+      console.log('File processed successfully');
+    } catch (processingError) {
+      console.error('Error in processUploadedFile:', processingError);
+      throw new Error(`Failed to process audio file: ${processingError.message}`);
+    }
+    
+    // Check if result is valid
+    if (!result || !result.summary) {
+      throw new Error('Processing completed but no summary was generated');
+    }
+    
+    console.log('Saving result to database');
     
     // Save the result to the database
     const insertResult = await db.query(
       `INSERT INTO summaries (user_email, file_name, summary, created_at)
        VALUES ($1, $2, $3, NOW())
        RETURNING id`,
-      [userEmail, req.file.originalname, result.summary]
+      [userEmail, uploadedFile.originalname, result.summary]
     );
     
     const summaryId = insertResult.rows[0].id;
+    console.log('Summary saved with ID:', summaryId);
     
     // Return the result
     res.json({
@@ -478,18 +506,24 @@ app.post('/api/process-audio', upload.single('audio'), async (req, res) => {
   } catch (error) {
     console.error('Error processing audio file:', error);
     
-    // Clean up the uploaded file if it exists
-    if (req.file) {
-      try {
-        await unlink(req.file.path);
-      } catch (unlinkError) {
-        console.error('Error deleting uploaded file:', unlinkError);
+    // Clean up the uploaded files if they exist
+    if (req.files && req.files.length > 0) {
+      for (const file of req.files) {
+        if (fs.existsSync(file.path)) {
+          try {
+            await unlink(file.path);
+            console.log('Cleaned up uploaded file:', file.path);
+          } catch (unlinkError) {
+            console.error('Error deleting uploaded file:', unlinkError);
+          }
+        }
       }
     }
     
     res.status(500).json({ 
       error: 'Error processing audio file', 
-      details: error.message 
+      details: error.message,
+      success: false
     });
   }
 });
