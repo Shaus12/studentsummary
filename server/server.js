@@ -423,6 +423,77 @@ app.post('/api/upload-audio', upload.single('audio'), async (req, res) => {
   }
 });
 
+// Add the process-audio endpoint
+app.post('/api/process-audio', upload.single('audio'), async (req, res) => {
+  try {
+    console.log('Audio processing request received');
+    
+    if (!req.file) {
+      return res.status(400).json({ error: 'No audio file uploaded' });
+    }
+    
+    console.log('File uploaded for processing:', req.file);
+    
+    // Get user email from token
+    const token = req.headers.authorization?.split(' ')[1];
+    if (!token) {
+      return res.status(401).json({ error: 'No authorization token provided' });
+    }
+    
+    let userEmail;
+    try {
+      const decoded = jwt.verify(token, process.env.JWT_SECRET);
+      userEmail = decoded.email;
+    } catch (error) {
+      return res.status(401).json({ error: 'Invalid token' });
+    }
+    
+    // Check if user is allowed to process audio
+    const usageCheck = await checkAndUpdateUsage(userEmail);
+    if (!usageCheck.allowed) {
+      // Clean up the uploaded file
+      await unlink(req.file.path);
+      return res.status(403).json({ error: 'Usage limit exceeded' });
+    }
+    
+    // Process the uploaded file
+    const result = await processUploadedFile(req.file.path, 'summary');
+    
+    // Save the result to the database
+    const insertResult = await db.query(
+      `INSERT INTO summaries (user_email, file_name, summary, created_at)
+       VALUES ($1, $2, $3, NOW())
+       RETURNING id`,
+      [userEmail, req.file.originalname, result.summary]
+    );
+    
+    const summaryId = insertResult.rows[0].id;
+    
+    // Return the result
+    res.json({
+      id: summaryId,
+      summary: result.summary,
+      success: true
+    });
+  } catch (error) {
+    console.error('Error processing audio file:', error);
+    
+    // Clean up the uploaded file if it exists
+    if (req.file) {
+      try {
+        await unlink(req.file.path);
+      } catch (unlinkError) {
+        console.error('Error deleting uploaded file:', unlinkError);
+      }
+    }
+    
+    res.status(500).json({ 
+      error: 'Error processing audio file', 
+      details: error.message 
+    });
+  }
+});
+
 // Add this middleware to debug authentication issues
 app.use((req, res, next) => {
   const authHeader = req.headers.authorization;
