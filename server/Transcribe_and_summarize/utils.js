@@ -22,49 +22,55 @@ export async function summarizeText(text, options = {}) {
       return "No text to summarize.";
     }
     
-    // Initialize the Gemini API with the correct API key
-    const genAI = new GoogleGenerativeAI(process.env.GOOGLE_API_KEY);
+    // Use the correct environment variable name: GEMINI_API_KEY
+    const apiKey = process.env.GEMINI_API_KEY;
+    if (!apiKey || apiKey.trim() === '') {
+      console.error("Missing or empty Gemini API key");
+      return `Here's the transcription: ${text.substring(0, 500)}${text.length > 500 ? '...' : ''}`;
+    }
     
-    // Use the correct model name - updated from gemini-pro to the latest version
-    // The error suggests we need to check available models
-    const model = genAI.getGenerativeModel({ model: "gemini-1.5-pro" });
+    // Log the first few characters of the API key for debugging (don't log the full key)
+    console.log(`Using Gemini API key starting with: ${apiKey.substring(0, 4)}...`);
     
-    // Create a prompt for summarization
-    const prompt = `Please summarize the following text in a concise and informative way:
+    // Initialize the Gemini API with the API key
+    const genAI = new GoogleGenerativeAI(apiKey);
     
-    ${text}
-    
-    Summary:`;
-    
-    // Generate content with the prompt
-    const result = await model.generateContent(prompt);
-    const response = await result.response;
-    const summary = response.text();
-    
-    return summary;
-  } catch (error) {
-    console.error("Error summarizing text:", error);
-    
-    // Try an alternative approach if the first one fails
+    // Try with gemini-pro model (more widely available)
     try {
-      console.log("Attempting alternative summarization method...");
+      console.log("Attempting summarization with gemini-pro model");
+      const model = genAI.getGenerativeModel({ model: "gemini-pro" });
       
-      // Initialize with a different model if available
-      const genAI = new GoogleGenerativeAI(process.env.GOOGLE_API_KEY);
+      const prompt = `Please summarize the following text in a concise and informative way:
       
-      // Try with a different model name
-      const model = genAI.getGenerativeModel({ model: "gemini-pro-latest" });
+      ${text}
       
-      const prompt = `Summarize this text: ${text}`;
+      Summary:`;
+      
       const result = await model.generateContent(prompt);
       const response = await result.response;
-      return response.text();
-    } catch (fallbackError) {
-      console.error("Alternative summarization also failed:", fallbackError);
+      const summary = response.text();
       
-      // Return a basic summary or the original text if all else fails
-      return `Failed to generate summary. Here's the transcription: ${text.substring(0, 500)}...`;
+      return summary;
+    } catch (error) {
+      console.error("Error with gemini-pro model:", error);
+      
+      // If the first attempt fails, try with a different model
+      try {
+        console.log("Attempting summarization with gemini-1.0-pro model");
+        const fallbackModel = genAI.getGenerativeModel({ model: "gemini-1.0-pro" });
+        
+        const prompt = `Summarize this text: ${text}`;
+        const result = await fallbackModel.generateContent(prompt);
+        const response = await result.response;
+        return response.text();
+      } catch (fallbackError) {
+        console.error("All Gemini models failed:", fallbackError);
+        return `Here's the transcription: ${text.substring(0, 500)}${text.length > 500 ? '...' : ''}`;
+      }
     }
+  } catch (error) {
+    console.error("Error summarizing text:", error);
+    return `Here's the transcription: ${text.substring(0, 500)}${text.length > 500 ? '...' : ''}`;
   }
 }
 
