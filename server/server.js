@@ -15,14 +15,8 @@ import { GoogleGenerativeAI } from '@google/generative-ai';
 import fs from 'fs';
 import { v4 as uuidv4 } from 'uuid';
 
-// Import only from index.js to avoid duplicate declarations
-import { 
-  processYouTube,
-  transcribeAudio, 
-  summarizeText,
-  processUploadedFile,
-  generatePDF
-} from './Transcribe_and_summarize/index.js';
+// Import the working audio processing functions
+import { transcribeAudio, summarizeText, generatePDF } from './Transcribe_and_summarize/audioProcessing.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -356,7 +350,7 @@ app.post("/api/process-youtube", async (req, res) => {
 app.post('/api/upload-audio', upload.single('audioFile'), async (req, res) => {
   try {
     console.log('Audio processing request received');
-    console.log('Files:', req.files);
+    console.log('Files:', req.file);
     console.log('Body:', req.body);
     
     if (!req.file) {
@@ -366,19 +360,22 @@ app.post('/api/upload-audio', upload.single('audioFile'), async (req, res) => {
     console.log('File uploaded for processing:', req.file);
     console.log('Starting to process file:', req.file.path);
     
-    // Extract options if provided
-    let options = {};
-    if (req.body.options) {
-      try {
-        options = JSON.parse(req.body.options);
-        console.log('Processing options:', options);
-      } catch (e) {
-        console.error('Error parsing options:', e);
-      }
+    // Process the uploaded file using the working implementation
+    const transcript = await transcribeAudio(req.file.path);
+    const summary = await summarizeText(transcript);
+    
+    // Generate PDF if requested
+    let pdfPath = null;
+    if (req.body.outputType === 'pdf') {
+      pdfPath = await generatePDF(summary);
     }
     
-    // Process the uploaded file
-    const result = await processUploadedFile(req.file.path, options);
+    const result = {
+      summary,
+      pdfPath,
+      method: 'upload'
+    };
+    
     console.log('File processed successfully');
     
     // Save the result to the database
