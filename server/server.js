@@ -377,9 +377,6 @@ app.post('/api/upload-audio', upload.single('audio'), async (req, res) => {
       return res.status(401).json({ error: 'Invalid token' });
     }
     
-    // Get output type from request
-    const outputType = req.body.outputType || 'summary';
-    
     // Check if user is allowed to process audio
     const usageCheck = await checkAndUpdateUsage(userEmail);
     if (!usageCheck.allowed) {
@@ -389,17 +386,14 @@ app.post('/api/upload-audio', upload.single('audio'), async (req, res) => {
     }
     
     // Process the uploaded file
-    const result = await processUploadedFile(req.file.path, outputType);
-    
-    // Clean up the uploaded file
-    await unlink(req.file.path);
+    const result = await processUploadedFile(req.file.path, 'summary');
     
     // Save the result to the database
     const insertResult = await db.query(
-      `INSERT INTO summaries (user_email, file_name, summary, pdf_path, created_at)
-       VALUES ($1, $2, $3, $4, NOW())
+      `INSERT INTO summaries (user_email, file_name, summary, created_at)
+       VALUES ($1, $2, $3, NOW())
        RETURNING id`,
-      [userEmail, req.file.originalname, result.summary, result.pdfPath]
+      [userEmail, req.file.originalname, result.summary]
     );
     
     const summaryId = insertResult.rows[0].id;
@@ -408,7 +402,7 @@ app.post('/api/upload-audio', upload.single('audio'), async (req, res) => {
     res.json({
       id: summaryId,
       summary: result.summary,
-      pdfPath: result.pdfPath ? `/files/${path.basename(result.pdfPath)}` : null
+      success: true
     });
   } catch (error) {
     console.error('Error processing audio file:', error);
