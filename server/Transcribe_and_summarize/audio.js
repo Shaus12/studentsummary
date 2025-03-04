@@ -26,40 +26,45 @@ const deepgram = createClient(deepgramApiKey);
 const execPromise = promisify(exec);
 
 /**
- * Convert audio file to a format compatible with transcription services
- * @param {string} inputPath - Path to input audio file
- * @returns {Promise<string>} - Path to converted audio file
+ * Convert audio file to a format Deepgram can handle (MP3)
+ * @param {string} filePath - Path to the audio file
+ * @returns {Promise<string>} - Path to the converted file
  */
-const convertAudioFormat = async (inputPath) => {
+async function convertAudioFile(filePath) {
   try {
-    console.log(`Converting audio file: ${inputPath}`);
+    // Create output path with mp3 extension (Deepgram handles MP3 well)
+    const outputPath = path.join(
+      path.dirname(filePath),
+      `${path.basename(filePath, path.extname(filePath))}_converted.mp3`
+    );
     
-    // Create output path with mp3 extension
-    const outputPath = path.join(tempDir, `converted_${Date.now()}.mp3`);
+    console.log(`Converting audio file from ${filePath} to ${outputPath}`);
     
-    // Convert using ffmpeg
+    // Use ffmpeg to convert the file to MP3 format with parameters
+    // that are known to work well with Deepgram
     return new Promise((resolve, reject) => {
-      ffmpeg(inputPath)
+      ffmpeg(filePath)
         .audioCodec('libmp3lame')
-        .audioBitrate('128k')
-        .audioChannels(1) // Mono for better transcription
-        .audioFrequency(44100)
-        .output(outputPath)
-        .on('end', () => {
-          console.log(`Audio conversion complete: ${outputPath}`);
-          resolve(outputPath);
-        })
+        .audioChannels(1)         // Mono
+        .audioFrequency(44100)    // 44.1kHz sampling rate
+        .audioBitrate('128k')     // 128kbps bitrate
+        .format('mp3')            // MP3 format
         .on('error', (err) => {
-          console.error('Error converting audio:', err);
+          console.error('Error in ffmpeg conversion:', err);
           reject(err);
         })
-        .run();
+        .on('end', () => {
+          console.log(`Converted audio file to: ${outputPath}`);
+          resolve(outputPath);
+        })
+        .save(outputPath);
     });
   } catch (error) {
-    console.error('Error in audio conversion:', error);
-    throw new Error(`Failed to convert audio file: ${error.message}`);
+    console.error("Error converting audio file:", error);
+    // If conversion fails, return the original file path
+    return filePath;
   }
-};
+}
 
 /**
  * Transcribe audio file using Deepgram with Whisper Large model
@@ -88,7 +93,7 @@ export async function transcribeAudio(filePath, language = 'auto') {
     };
     
     // If language is specifically set, override the default
-    if (language && language !== 'auto') {
+    if (language && language !== 'auto' && language !== 'he') {
       options.language = language;
     }
     
@@ -98,7 +103,7 @@ export async function transcribeAudio(filePath, language = 'auto') {
     // Create a source from the audio buffer
     const source = {
       buffer: audioFile,
-      mimetype: 'audio/wav'
+      mimetype: 'audio/mp3'  // Changed to MP3
     };
     
     // Send to Deepgram for transcription using the new format
@@ -113,45 +118,6 @@ export async function transcribeAudio(filePath, language = 'auto') {
   } catch (error) {
     console.error('Error transcribing audio:', error);
     throw error;
-  }
-}
-
-/**
- * Convert audio file to a format Deepgram can handle (WAV)
- * @param {string} filePath - Path to the audio file
- * @returns {Promise<string>} - Path to the converted file
- */
-async function convertAudioFile(filePath) {
-  try {
-    const outputPath = path.join(
-      path.dirname(filePath),
-      `${path.basename(filePath, path.extname(filePath))}_converted.wav`
-    );
-    
-    console.log(`Converting audio file from ${filePath} to ${outputPath}`);
-    
-    // Use ffmpeg to convert the file to WAV format with more specific parameters
-    // that are known to work well with Deepgram
-    return new Promise((resolve, reject) => {
-      ffmpeg(filePath)
-        .audioCodec('pcm_s16le')  // 16-bit PCM
-        .audioChannels(1)         // Mono
-        .audioFrequency(16000)    // 16kHz sampling rate
-        .format('wav')            // WAV format
-        .on('error', (err) => {
-          console.error('Error in ffmpeg conversion:', err);
-          reject(err);
-        })
-        .on('end', () => {
-          console.log(`Converted audio file to: ${outputPath}`);
-          resolve(outputPath);
-        })
-        .save(outputPath);
-    });
-  } catch (error) {
-    console.error("Error converting audio file:", error);
-    // If conversion fails, return the original file path
-    return filePath;
   }
 }
 
@@ -203,35 +169,33 @@ export async function processUploadedFile(filePath, options = {}) {
     console.log(`Processing uploaded file: ${filePath}`);
     
     // Step 1: Transcribe the audio
-    let transcript = '';
+    let transcriptionResponse;
     try {
-      const transcriptionResponse = await transcribeAudio(filePath, options.language || 'auto');
-
-      // Step 2: Extract transcript from the new response format
-      try {
-        // Try to extract transcript from the new response format
-        transcript = transcriptionResponse.results?.channels[0]?.alternatives[0]?.transcript || '';
-        
-        // If that fails, try other possible formats
-        if (!transcript && transcriptionResponse.results?.utterances) {
-          transcript = transcriptionResponse.results.utterances.map(u => u.transcript).join(' ');
-        }
-        
-        // If still no transcript, check if there's a direct transcript property
-        if (!transcript && transcriptionResponse.transcript) {
-          transcript = transcriptionResponse.transcript;
-        }
-        
-        console.log(`Extracted transcript of length: ${transcript.length}`);
-      } catch (error) {
-        console.error('Error extracting transcript from response:', error);
-        console.log('Response structure:', JSON.stringify(transcriptionResponse));
+      transcriptionResponse = await transcribeAudio(filePath, options.language || 'auto');
+      
+      // Check if there was an error in the response
+      if (transcriptionResponse.error || !transcriptionResponse.results) {
+        console.log("Deepgram returned an error, using fallback");
+        transcriptionResponse = await fallbackTranscription(filePath);
       }
     } catch (error) {
       console.error('Transcription failed, using fallback:', error);
+      transcriptionResponse = await fallbackTranscription(filePath);
+    }
+
+    // Step 2: Extract transcript from the response
+    let transcript = '';
+    try {
+      // Try to extract transcript from the response format
+      transcript = transcriptionResponse.results?.channels[0]?.alternatives[0]?.transcript || '';
+      
+      console.log(`Extracted transcript of length: ${transcript.length}`);
+    } catch (error) {
+      console.error('Error extracting transcript from response:', error);
+      transcript = "לא ניתן היה לתמלל את הקובץ. אנא ודא שהקובץ תקין ונסה שוב.";
     }
     
-    // If transcription failed or returned empty, use a fallback message
+    // If transcript is empty, use a fallback message
     if (!transcript || transcript.trim().length === 0) {
       transcript = "לא ניתן היה לתמלל את הקובץ. אנא ודא שהקובץ תקין ונסה שוב.";
     }
@@ -280,6 +244,39 @@ export async function processUploadedFile(filePath, options = {}) {
     return {
       summary: "אירעה שגיאה בעיבוד הקובץ. אנא נסה שוב מאוחר יותר.",
       method: 'upload'
+    };
+  }
+}
+
+/**
+ * Fallback transcription method when Deepgram fails
+ * @param {string} filePath - Path to audio file
+ * @returns {Promise<string>} - Basic transcription text
+ */
+async function fallbackTranscription(filePath) {
+  try {
+    console.log("Using fallback transcription method");
+    
+    // Create a simple fallback message in Hebrew
+    return {
+      results: {
+        channels: [{
+          alternatives: [{
+            transcript: "התמלול נכשל. מערכת הגיבוי מספקת הודעה זו במקום. אנא נסה שוב עם קובץ אודיו אחר או פנה לתמיכה."
+          }]
+        }]
+      }
+    };
+  } catch (error) {
+    console.error("Fallback transcription also failed:", error);
+    return {
+      results: {
+        channels: [{
+          alternatives: [{
+            transcript: "שגיאה בתמלול. אנא נסה שוב מאוחר יותר."
+          }]
+        }]
+      }
     };
   }
 } 
