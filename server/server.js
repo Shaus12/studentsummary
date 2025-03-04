@@ -385,8 +385,18 @@ app.post('/api/upload-audio', upload.single('audio'), async (req, res) => {
       return res.status(403).json({ error: 'Usage limit exceeded' });
     }
     
-    // Process the uploaded file
-    const result = await processUploadedFile(req.file.path, 'summary');
+    // Extract options if provided
+    let options = {};
+    if (req.body.options) {
+      try {
+        options = JSON.parse(req.body.options);
+      } catch (e) {
+        console.error('Error parsing options:', e);
+      }
+    }
+    
+    // Process the uploaded file with options
+    const result = await processUploadedFile(req.file.path, options);
     
     // Generate PDF if needed
     let pdfPath = null;

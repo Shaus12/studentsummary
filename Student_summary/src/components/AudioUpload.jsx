@@ -16,6 +16,13 @@ const AudioUpload = () => {
       const formData = new FormData();
       formData.append('audio', audioFile);
       
+      // Add options for summarization
+      formData.append('options', JSON.stringify({
+        language: 'Hebrew', // Default to Hebrew
+        style: 'academic',  // Or any other style preference
+        length: 'medium'    // Or short/long
+      }));
+      
       const response = await axios.post('/api/upload-audio', formData, {
         headers: {
           'Content-Type': 'multipart/form-data',
