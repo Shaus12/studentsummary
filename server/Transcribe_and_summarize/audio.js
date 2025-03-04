@@ -26,29 +26,27 @@ const deepgram = createClient(deepgramApiKey);
 const execPromise = promisify(exec);
 
 /**
- * Convert audio file to a format Deepgram can handle (MP3)
+ * Convert audio file to a format Deepgram can handle
  * @param {string} filePath - Path to the audio file
  * @returns {Promise<string>} - Path to the converted file
  */
 async function convertAudioFile(filePath) {
   try {
-    // Create output path with mp3 extension (Deepgram handles MP3 well)
+    // Create output path with flac extension (FLAC often works well with speech recognition)
     const outputPath = path.join(
       path.dirname(filePath),
-      `${path.basename(filePath, path.extname(filePath))}_converted.mp3`
+      `${path.basename(filePath, path.extname(filePath))}_converted.flac`
     );
     
     console.log(`Converting audio file from ${filePath} to ${outputPath}`);
     
-    // Use ffmpeg to convert the file to MP3 format with parameters
-    // that are known to work well with Deepgram
+    // Use ffmpeg to convert the file to FLAC format
     return new Promise((resolve, reject) => {
       ffmpeg(filePath)
-        .audioCodec('libmp3lame')
+        .audioCodec('flac')
         .audioChannels(1)         // Mono
-        .audioFrequency(44100)    // 44.1kHz sampling rate
-        .audioBitrate('128k')     // 128kbps bitrate
-        .format('mp3')            // MP3 format
+        .audioFrequency(16000)    // 16kHz sampling rate (good for speech)
+        .format('flac')           // FLAC format
         .on('error', (err) => {
           console.error('Error in ffmpeg conversion:', err);
           reject(err);
@@ -103,7 +101,7 @@ export async function transcribeAudio(filePath, language = 'auto') {
     // Create a source from the audio buffer
     const source = {
       buffer: audioFile,
-      mimetype: 'audio/mp3'  // Changed to MP3
+      mimetype: 'audio/flac'  // Changed to FLAC
     };
     
     // Send to Deepgram for transcription using the new format
@@ -251,18 +249,32 @@ export async function processUploadedFile(filePath, options = {}) {
 /**
  * Fallback transcription method when Deepgram fails
  * @param {string} filePath - Path to audio file
- * @returns {Promise<string>} - Basic transcription text
+ * @returns {Promise<object>} - Basic transcription response
  */
 async function fallbackTranscription(filePath) {
   try {
     console.log("Using fallback transcription method");
     
-    // Create a simple fallback message in Hebrew
+    // Create a more detailed fallback message in Hebrew
     return {
       results: {
         channels: [{
           alternatives: [{
-            transcript: "התמלול נכשל. מערכת הגיבוי מספקת הודעה זו במקום. אנא נסה שוב עם קובץ אודיו אחר או פנה לתמיכה."
+            transcript: `
+            התמלול האוטומטי נכשל עבור הקובץ "${path.basename(filePath)}".
+            
+            סיבות אפשריות:
+            - איכות הקלטה נמוכה
+            - רעש רקע משמעותי
+            - פורמט קובץ לא נתמך
+            
+            המלצות:
+            - נסה להעלות קובץ באיכות גבוהה יותר
+            - נסה להמיר את הקובץ לפורמט MP3 או WAV לפני ההעלאה
+            - ודא שהקובץ מכיל דיבור ברור
+            
+            אנא נסה שוב או פנה לתמיכה אם הבעיה נמשכת.
+            `
           }]
         }]
       }
