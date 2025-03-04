@@ -71,7 +71,7 @@ try {
   console.error('Database connection error:', err);
 }
 
-// Set up multer for file uploads
+// Configure multer for file storage
 const storage = multer.diskStorage({
   destination: function (req, file, cb) {
     cb(null, path.join(__dirname, 'temp'));
@@ -82,21 +82,27 @@ const storage = multer.diskStorage({
   }
 });
 
-const upload = multer({ 
+// Configure multer with increased file size limits
+const upload = multer({
   storage: storage,
   limits: {
-    fileSize: 100 * 1024 * 1024, // 100MB max file size
+    fileSize: 500 * 1024 * 1024, // 500MB max file size
   },
   fileFilter: (req, file, cb) => {
-    // Accept audio files only
+    // Accept audio and video files
     if (file.mimetype.startsWith('audio/') || 
-        file.originalname.match(/\.(mp3|wav|m4a|flac|ogg|aac)$/)) {
+        file.mimetype.startsWith('video/') ||
+        file.originalname.match(/\.(mp3|wav|m4a|flac|ogg|mp4|mov|avi|wmv)$/i)) {
       cb(null, true);
     } else {
-      cb(new Error('Only audio files are allowed!'), false);
+      cb(new Error('Only audio and video files are allowed!'), false);
     }
   }
 });
+
+// Configure Express to handle larger payloads
+app.use(express.json({ limit: '500mb' }));
+app.use(express.urlencoded({ limit: '500mb', extended: true }));
 
 // Update the checkAndUpdateUsage function
 const checkAndUpdateUsage = async (userEmail) => {
@@ -714,6 +720,95 @@ app.post('/api/transcribe/upload', authenticateToken, upload.single('audioFile')
     console.error('Error processing uploaded audio:', error);
     res.status(500).json({ error: error.message });
   }
+});
+
+// Add or update your file upload endpoint
+app.post('/api/process-audio', upload.single('audioFile'), async (req, res) => {
+  try {
+    console.log('Audio file upload request received');
+    
+    if (!req.file) {
+      return res.status(400).json({ 
+        error: 'No audio file uploaded',
+        success: false
+      });
+    }
+    
+    console.log(`Audio file uploaded: ${req.file.path}`);
+    console.log(`Original filename: ${req.file.originalname}`);
+    console.log(`File size: ${req.file.size} bytes`);
+    
+    // Get processing options from request body
+    const options = {
+      outputType: req.body.outputType || 'summary',
+      includeTranscription: req.body.includeTranscription === 'true',
+      summaryOptions: req.body.summaryOptions ? 
+        (typeof req.body.summaryOptions === 'string' ? 
+          JSON.parse(req.body.summaryOptions) : req.body.summaryOptions) : 
+        { language: 'he', style: 'detailed', format: 'bullets' }
+    };
+    
+    console.log('Processing options:', options);
+    
+    // Import the processAudioFile function
+    const { processAudioFile } = await import('./Transcribe_and_summarize/audio.js');
+    
+    // Process the uploaded file
+    const result = await processAudioFile(req.file.path, options);
+    
+    // Return the result
+    res.json({
+      ...result,
+      success: true
+    });
+  } catch (error) {
+    console.error('Error processing uploaded audio:', error);
+    res.status(500).json({ 
+      error: error.message,
+      success: false
+    });
+  }
+});
+
+// Add a route to handle larger file uploads through chunking if needed
+app.post('/api/upload-large-file', (req, res) => {
+  const busboy = require('busboy');
+  const bb = busboy({ headers: req.headers });
+  
+  let filePath = '';
+  let fileName = '';
+  
+  bb.on('file', (name, file, info) => {
+    fileName = info.filename;
+    filePath = path.join(__dirname, 'temp', `upload_${Date.now()}_${fileName}`);
+    file.pipe(fs.createWriteStream(filePath));
+  });
+  
+  bb.on('finish', async () => {
+    try {
+      console.log(`Large file uploaded: ${filePath}`);
+      
+      // Process the file
+      const { processAudioFile } = await import('./Transcribe_and_summarize/audio.js');
+      const result = await processAudioFile(filePath, {
+        outputType: 'summary',
+        summaryOptions: { language: 'he' }
+      });
+      
+      res.json({
+        ...result,
+        success: true
+      });
+    } catch (error) {
+      console.error('Error processing large file:', error);
+      res.status(500).json({ 
+        error: error.message,
+        success: false
+      });
+    }
+  });
+  
+  req.pipe(bb);
 });
 
 // Start the server
