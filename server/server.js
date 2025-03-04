@@ -22,7 +22,7 @@ import { createClient } from '@deepgram/sdk';
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import fs from 'fs';
 import puppeteer from 'puppeteer';
-import { processAudioFile } from './Transcribe_and_summarize/audio.js';
+import { processAudioFile } from './Transcribe_and_summarize/audio_old.js';
 import { v4 as uuidv4 } from 'uuid';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -306,42 +306,15 @@ app.post("/api/google-login", async (req, res) => {
 
 app.post("/api/process-youtube", async (req, res) => {
   try {
-    console.log('Processing YouTube video request received');
-    console.log('Full request:', {
-      headers: req.headers,
-      body: req.body,
-      query: req.query,
-      params: req.params
-    });
+    const { youtubeUrl } = req.body;
     
-    // Use let instead of const for youtubeUrl so we can reassign it
-    let youtubeUrl = req.body.youtubeUrl || req.body.url || req.query.youtubeUrl;
-    console.log('YouTube URL:', youtubeUrl);
-    
-    // Check if the URL might be in a different property
     if (!youtubeUrl) {
-      console.log('Checking other possible properties in request body...');
-      for (const key in req.body) {
-        console.log(`Property ${key}:`, req.body[key]);
-        if (typeof req.body[key] === 'string' && 
-            (req.body[key].includes('youtube.com') || req.body[key].includes('youtu.be'))) {
-          console.log(`Found YouTube URL in property ${key}`);
-          youtubeUrl = req.body[key];
-          break;
-        }
-      }
-    }
-    
-    // Validate YouTube URL
-    if (!youtubeUrl || typeof youtubeUrl !== 'string') {
-      console.error('Invalid YouTube URL:', youtubeUrl);
-      return res.status(400).json({ error: 'Invalid YouTube URL. Please provide a valid YouTube URL.' });
+      return res.status(400).json({ error: 'YouTube URL is required' });
     }
     
     // Get user email from token
     const token = req.headers.authorization?.split(' ')[1];
     if (!token) {
-      console.error('No authorization token provided');
       return res.status(401).json({ error: 'No authorization token provided' });
     }
     
@@ -350,31 +323,19 @@ app.post("/api/process-youtube", async (req, res) => {
       const decoded = jwt.verify(token, process.env.JWT_SECRET);
       userEmail = decoded.email;
     } catch (error) {
-      console.error('Invalid token:', error);
       return res.status(401).json({ error: 'Invalid token' });
     }
     
-    // Get output type from request
-    const outputType = req.body.outputType || 'summary';
-    
-    // Get summary options from request
-    const summaryOptions = req.body.summaryOptions || {};
-    
-    // Check if user is allowed to process videos
-    const usageCheck = await checkAndUpdateUsage(userEmail);
-    if (!usageCheck.allowed) {
-      return res.status(403).json({ error: 'Usage limit exceeded' });
-    }
-    
-    // Process the YouTube video
-    const result = await processYouTube(youtubeUrl, outputType, summaryOptions);
+    // Process the YouTube video using the old implementation
+    const { processYouTube } = await import('./Transcribe_and_summarize/processYouTube_old.js');
+    const result = await processYouTube(youtubeUrl, 'summary', { language: 'he' });
     
     // Save the result to the database
     const insertResult = await db.query(
-      `INSERT INTO summaries (user_email, video_url, summary, pdf_path, created_at)
-       VALUES ($1, $2, $3, $4, NOW())
+      `INSERT INTO summaries (user_email, video_url, summary, created_at)
+       VALUES ($1, $2, $3, NOW())
        RETURNING id`,
-      [userEmail, youtubeUrl, result.summary, result.pdfPath]
+      [userEmail, youtubeUrl, result.summary]
     );
     
     const summaryId = insertResult.rows[0].id;
@@ -383,14 +344,13 @@ app.post("/api/process-youtube", async (req, res) => {
     res.json({
       id: summaryId,
       summary: result.summary,
-      pdfPath: result.pdfPath ? `/files/${path.basename(result.pdfPath)}` : null,
-      method: result.method
+      success: true
     });
   } catch (error) {
     console.error('Error processing YouTube video:', error);
     res.status(500).json({ 
-      error: 'Error processing YouTube video', 
-      details: error.message 
+      error: error.message,
+      success: false
     });
   }
 });
@@ -761,8 +721,6 @@ app.post('/api/process-audio', upload.single('audioFile'), async (req, res) => {
     }
     
     console.log(`Audio file uploaded: ${req.file.path}`);
-    console.log(`Original filename: ${req.file.originalname}`);
-    console.log(`File size: ${req.file.size} bytes`);
     
     // Get user email from token
     const token = req.headers.authorization?.split(' ')[1];
@@ -778,29 +736,19 @@ app.post('/api/process-audio', upload.single('audioFile'), async (req, res) => {
       return res.status(401).json({ error: 'Invalid token' });
     }
     
-    // Get processing options from request body
-    const options = {
-      outputType: req.body.outputType || 'summary',
-      includeTranscription: req.body.includeTranscription === 'true',
-      language: 'he', // Default to Hebrew
-      summaryOptions: req.body.summaryOptions ? 
-        (typeof req.body.summaryOptions === 'string' ? 
-          JSON.parse(req.body.summaryOptions) : req.body.summaryOptions) : 
-        { language: 'he', style: 'detailed', format: 'bullets' }
-    };
-    
-    console.log('Processing options:', options);
-    
-    // Process the uploaded file
-    const { processAudioFile } = await import('./Transcribe_and_summarize/audio.js');
-    const result = await processAudioFile(req.file.path, options);
+    // Process the uploaded file using the old implementation
+    const { processAudioFile } = await import('./Transcribe_and_summarize/audio_old.js');
+    const result = await processAudioFile(req.file.path, {
+      outputType: 'summary',
+      language: 'he'
+    });
     
     // Save the result to the database
     const insertResult = await db.query(
       `INSERT INTO summaries (user_email, file_name, summary, created_at)
        VALUES ($1, $2, $3, NOW())
        RETURNING id`,
-      [userEmail, req.file.originalname, result.summary || result.transcription]
+      [userEmail, req.file.originalname, result.summary]
     );
     
     const summaryId = insertResult.rows[0].id;
@@ -808,7 +756,7 @@ app.post('/api/process-audio', upload.single('audioFile'), async (req, res) => {
     // Return the result
     res.json({
       id: summaryId,
-      summary: result.summary || result.transcription,
+      summary: result.summary,
       success: true
     });
   } catch (error) {
@@ -839,7 +787,7 @@ app.post('/api/upload-large-file', (req, res) => {
       console.log(`Large file uploaded: ${filePath}`);
       
       // Process the file
-      const { processAudioFile } = await import('./Transcribe_and_summarize/audio.js');
+      const { processAudioFile } = await import('./Transcribe_and_summarize/audio_old.js');
       const result = await processAudioFile(filePath, {
         outputType: 'summary',
         summaryOptions: { language: 'he' }
@@ -964,7 +912,7 @@ app.post('/api/process-chunked-file', async (req, res) => {
     }
     
     // Process the file
-    const { processAudioFile } = await import('./Transcribe_and_summarize/audio.js');
+    const { processAudioFile } = await import('./Transcribe_and_summarize/audio_old.js');
     const result = await processAudioFile(filePath, {
       outputType: 'summary',
       language: 'he',
