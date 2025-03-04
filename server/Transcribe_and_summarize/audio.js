@@ -130,9 +130,23 @@ async function convertAudioFile(filePath) {
     console.log(`Converting audio file from ${filePath} to ${outputPath}`);
     
     // Use ffmpeg to convert the file to WAV format with more specific parameters
-    await execPromise(`ffmpeg -i "${filePath}" -acodec pcm_s16le -ac 1 -ar 16000 "${outputPath}"`);
-    
-    return outputPath;
+    // that are known to work well with Deepgram
+    return new Promise((resolve, reject) => {
+      ffmpeg(filePath)
+        .audioCodec('pcm_s16le')  // 16-bit PCM
+        .audioChannels(1)         // Mono
+        .audioFrequency(16000)    // 16kHz sampling rate
+        .format('wav')            // WAV format
+        .on('error', (err) => {
+          console.error('Error in ffmpeg conversion:', err);
+          reject(err);
+        })
+        .on('end', () => {
+          console.log(`Converted audio file to: ${outputPath}`);
+          resolve(outputPath);
+        })
+        .save(outputPath);
+    });
   } catch (error) {
     console.error("Error converting audio file:", error);
     // If conversion fails, return the original file path
@@ -188,31 +202,37 @@ export async function processUploadedFile(filePath, options = {}) {
     console.log(`Processing uploaded file: ${filePath}`);
     
     // Step 1: Transcribe the audio
-    const transcriptionResponse = await transcribeAudio(filePath, options.language || 'auto');
-
-    // Step 2: Extract transcript from the new response format
-    // The structure might be different in the new SDK
     let transcript = '';
-    
     try {
-      // Try to extract transcript from the new response format
-      transcript = transcriptionResponse.results?.channels[0]?.alternatives[0]?.transcript || '';
-      
-      // If that fails, try other possible formats
-      if (!transcript && transcriptionResponse.results?.utterances) {
-        transcript = transcriptionResponse.results.utterances.map(u => u.transcript).join(' ');
+      const transcriptionResponse = await transcribeAudio(filePath, options.language || 'auto');
+
+      // Step 2: Extract transcript from the new response format
+      try {
+        // Try to extract transcript from the new response format
+        transcript = transcriptionResponse.results?.channels[0]?.alternatives[0]?.transcript || '';
+        
+        // If that fails, try other possible formats
+        if (!transcript && transcriptionResponse.results?.utterances) {
+          transcript = transcriptionResponse.results.utterances.map(u => u.transcript).join(' ');
+        }
+        
+        // If still no transcript, check if there's a direct transcript property
+        if (!transcript && transcriptionResponse.transcript) {
+          transcript = transcriptionResponse.transcript;
+        }
+        
+        console.log(`Extracted transcript of length: ${transcript.length}`);
+      } catch (error) {
+        console.error('Error extracting transcript from response:', error);
+        console.log('Response structure:', JSON.stringify(transcriptionResponse));
       }
-      
-      // If still no transcript, check if there's a direct transcript property
-      if (!transcript && transcriptionResponse.transcript) {
-        transcript = transcriptionResponse.transcript;
-      }
-      
-      console.log(`Extracted transcript of length: ${transcript.length}`);
     } catch (error) {
-      console.error('Error extracting transcript from response:', error);
-      console.log('Response structure:', JSON.stringify(transcriptionResponse));
-      transcript = 'Failed to extract transcript from response.';
+      console.error('Transcription failed, using fallback:', error);
+    }
+    
+    // If transcription failed or returned empty, use a fallback message
+    if (!transcript || transcript.trim().length === 0) {
+      transcript = "לא ניתן היה לתמלל את הקובץ. אנא ודא שהקובץ תקין ונסה שוב.";
     }
 
     // Step 3: Break transcription into chunks
@@ -233,7 +253,13 @@ export async function processUploadedFile(filePath, options = {}) {
     }
 
     // Step 5: Combine all summaries into a final summary
-    const finalSummary = await summarizeText(summaries.join(" "), options);
+    let finalSummary = '';
+    if (summaries.length > 0) {
+      finalSummary = await summarizeText(summaries.join(" "), options);
+    } else {
+      finalSummary = "לא ניתן היה לסכם את הקובץ. אנא ודא שהקובץ תקין ונסה שוב.";
+    }
+    
     console.log("הנה הסיכום שלך:", finalSummary);
 
     // Step 6: Generate PDF if requested
@@ -250,6 +276,9 @@ export async function processUploadedFile(filePath, options = {}) {
     };
   } catch (error) {
     console.error("Error processing and summarizing:", error);
-    throw error;
+    return {
+      summary: "אירעה שגיאה בעיבוד הקובץ. אנא נסה שוב מאוחר יותר.",
+      method: 'upload'
+    };
   }
 } 
