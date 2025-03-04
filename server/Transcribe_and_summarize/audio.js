@@ -71,8 +71,8 @@ export async function transcribeAudio(filePath, language = 'auto') {
   try {
     console.log(`Transcribing audio file: ${filePath} with language: ${language}`);
     
-    // Convert audio to WAV format for better compatibility
-    const convertedFilePath = await convertAudioToWav(filePath);
+    // Convert audio to a format Deepgram can handle
+    const convertedFilePath = await convertAudioFile(filePath);
     
     // Read the audio file
     const audioFile = await fs.promises.readFile(convertedFilePath);
