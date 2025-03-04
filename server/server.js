@@ -722,7 +722,7 @@ app.post('/api/transcribe/upload', authenticateToken, upload.single('audioFile')
   }
 });
 
-// Add or update your file upload endpoint
+// Update your audio processing endpoint
 app.post('/api/process-audio', upload.single('audioFile'), async (req, res) => {
   try {
     console.log('Audio file upload request received');
@@ -738,10 +738,25 @@ app.post('/api/process-audio', upload.single('audioFile'), async (req, res) => {
     console.log(`Original filename: ${req.file.originalname}`);
     console.log(`File size: ${req.file.size} bytes`);
     
+    // Get user email from token
+    const token = req.headers.authorization?.split(' ')[1];
+    if (!token) {
+      return res.status(401).json({ error: 'No authorization token provided' });
+    }
+    
+    let userEmail;
+    try {
+      const decoded = jwt.verify(token, process.env.JWT_SECRET);
+      userEmail = decoded.email;
+    } catch (error) {
+      return res.status(401).json({ error: 'Invalid token' });
+    }
+    
     // Get processing options from request body
     const options = {
       outputType: req.body.outputType || 'summary',
       includeTranscription: req.body.includeTranscription === 'true',
+      language: 'he', // Default to Hebrew
       summaryOptions: req.body.summaryOptions ? 
         (typeof req.body.summaryOptions === 'string' ? 
           JSON.parse(req.body.summaryOptions) : req.body.summaryOptions) : 
@@ -750,15 +765,24 @@ app.post('/api/process-audio', upload.single('audioFile'), async (req, res) => {
     
     console.log('Processing options:', options);
     
-    // Import the processAudioFile function
-    const { processAudioFile } = await import('./Transcribe_and_summarize/audio.js');
-    
     // Process the uploaded file
+    const { processAudioFile } = await import('./Transcribe_and_summarize/audio.js');
     const result = await processAudioFile(req.file.path, options);
+    
+    // Save the result to the database
+    const insertResult = await db.query(
+      `INSERT INTO summaries (user_email, file_name, summary, created_at)
+       VALUES ($1, $2, $3, NOW())
+       RETURNING id`,
+      [userEmail, req.file.originalname, result.summary || result.transcription]
+    );
+    
+    const summaryId = insertResult.rows[0].id;
     
     // Return the result
     res.json({
-      ...result,
+      id: summaryId,
+      summary: result.summary || result.transcription,
       success: true
     });
   } catch (error) {
