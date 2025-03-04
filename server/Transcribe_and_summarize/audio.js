@@ -6,6 +6,7 @@ import ffmpeg from 'fluent-ffmpeg';
 import { promisify } from 'util';
 import { cleanupFile } from './utils.js';
 import { summarizeText } from './utils.js';
+import { exec } from 'child_process';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -19,6 +20,8 @@ if (!fs.existsSync(tempDir)) {
 // Initialize Deepgram client with the new SDK format
 const deepgramApiKey = process.env.DEEPGRAM_API_KEY;
 const deepgram = createClient(deepgramApiKey);
+
+const execPromise = promisify(exec);
 
 /**
  * Convert audio file to a format compatible with transcription services
@@ -71,7 +74,11 @@ export async function transcribeAudio(filePath, language) {
       throw new Error(`File not found: ${filePath}`);
     }
     
-    const audioFile = fs.readFileSync(filePath);
+    // Convert the audio file to a format Deepgram can handle
+    const convertedFilePath = await convertAudioFile(filePath);
+    console.log(`Converted audio file to: ${convertedFilePath}`);
+    
+    const audioFile = fs.readFileSync(convertedFilePath);
     
     // Determine the appropriate language parameter based on the input
     let deepgramLanguage = language;
@@ -101,11 +108,17 @@ export async function transcribeAudio(filePath, language) {
     // Create a source from the file buffer
     const source = {
       buffer: audioFile,
-      mimetype: 'audio/mp3' // Explicitly set to audio/mp3
+      mimetype: 'audio/wav' // Use WAV format which is widely supported
     };
     
     // Use the v3 SDK format for transcription
     const response = await deepgram.listen.prerecorded.transcribeFile(source, options);
+    
+    // Clean up the converted file if it's different from the original
+    if (convertedFilePath !== filePath && fs.existsSync(convertedFilePath)) {
+      fs.unlinkSync(convertedFilePath);
+      console.log(`Cleaned up temporary converted file: ${convertedFilePath}`);
+    }
     
     // Check for error in the response
     if (response.error) {
@@ -161,6 +174,31 @@ export async function transcribeAudio(filePath, language) {
     // Try to extract more meaningful error message
     const errorMessage = error.message || "Unknown error";
     throw new Error(`Failed to transcribe with Deepgram: ${errorMessage}`);
+  }
+}
+
+/**
+ * Convert audio file to a format Deepgram can handle (WAV)
+ * @param {string} filePath - Path to the audio file
+ * @returns {Promise<string>} - Path to the converted file
+ */
+async function convertAudioFile(filePath) {
+  try {
+    const outputPath = path.join(
+      path.dirname(filePath),
+      `${path.basename(filePath, path.extname(filePath))}_converted.wav`
+    );
+    
+    console.log(`Converting audio file from ${filePath} to ${outputPath}`);
+    
+    // Use ffmpeg to convert the file to WAV format
+    await execPromise(`ffmpeg -i "${filePath}" -ar 16000 -ac 1 -c:a pcm_s16le "${outputPath}"`);
+    
+    return outputPath;
+  } catch (error) {
+    console.error("Error converting audio file:", error);
+    // If conversion fails, return the original file path
+    return filePath;
   }
 }
 
