@@ -7,6 +7,15 @@ import jwt from 'jsonwebtoken';
 import { OAuth2Client } from 'google-auth-library';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import { unlink } from 'fs/promises';
+import multer from 'multer';
+import { existsSync, mkdirSync } from 'fs';
+import { createClient } from '@deepgram/sdk';
+import { GoogleGenerativeAI } from '@google/generative-ai';
+import fs from 'fs';
+import { v4 as uuidv4 } from 'uuid';
+
+// Import only from index.js to avoid duplicate declarations
 import { 
   processYouTube,
   transcribeAudio, 
@@ -14,16 +23,6 @@ import {
   processUploadedFile,
   generatePDF
 } from './Transcribe_and_summarize/index.js';
-import { unlink } from 'fs/promises';
-import multer from 'multer';
-import { existsSync, mkdirSync } from 'fs';
-import PDFDocument from 'pdfkit';
-import { createClient } from '@deepgram/sdk';
-import { GoogleGenerativeAI } from '@google/generative-ai';
-import fs from 'fs';
-import puppeteer from 'puppeteer';
-import { processAudioFile } from './Transcribe_and_summarize/audioProcessing.js';
-import { v4 as uuidv4 } from 'uuid';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -326,8 +325,7 @@ app.post("/api/process-youtube", async (req, res) => {
       return res.status(401).json({ error: 'Invalid token' });
     }
     
-    // Process the YouTube video using the old implementation
-    const { processYouTube } = await import('./Transcribe_and_summarize/processYT.js');
+    // Process the YouTube video using the imported function
     const result = await processYouTube(youtubeUrl, 'summary', { language: 'he' });
     
     // Save the result to the database
@@ -449,6 +447,78 @@ app.use((req, res, next) => {
   next();
 });
 
+// Add a usage status endpoint
+app.get('/api/usage-status', async (req, res) => {
+  try {
+    // Get user email from token
+    const token = req.headers.authorization?.split(' ')[1];
+    if (!token) {
+      return res.status(401).json({ error: 'No authorization token provided' });
+    }
+    
+    let userEmail;
+    try {
+      const decoded = jwt.verify(token, process.env.JWT_SECRET);
+      userEmail = decoded.email;
+    } catch (error) {
+      return res.status(401).json({ error: 'Invalid token' });
+    }
+    
+    // Get user information
+    const userResult = await db.query(
+      `SELECT membership_type FROM users WHERE email = $1`,
+      [userEmail]
+    );
+    
+    if (userResult.rows.length === 0) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+    
+    const membershipType = userResult.rows[0].membership_type;
+    
+    // Get usage statistics
+    const usageResult = await db.query(
+      `SELECT COUNT(*) as total_summaries FROM summaries WHERE user_email = $1`,
+      [userEmail]
+    );
+    
+    const totalSummaries = parseInt(usageResult.rows[0].total_summaries) || 0;
+    
+    // Define limits based on membership type
+    const limits = {
+      free: {
+        maxSummaries: 5,
+        maxFileSize: 50 * 1024 * 1024, // 50MB
+        features: ['basic_summaries']
+      },
+      premium: {
+        maxSummaries: 100,
+        maxFileSize: 500 * 1024 * 1024, // 500MB
+        features: ['basic_summaries', 'advanced_summaries', 'pdf_export']
+      }
+    };
+    
+    const userLimits = limits[membershipType] || limits.free;
+    
+    // Return usage information
+    res.json({
+      membershipType,
+      usage: {
+        summaries: totalSummaries,
+        remainingSummaries: Math.max(0, userLimits.maxSummaries - totalSummaries)
+      },
+      limits: userLimits,
+      success: true
+    });
+  } catch (error) {
+    console.error('Error getting usage status:', error);
+    res.status(500).json({ 
+      error: 'Error getting usage status', 
+      details: error.message 
+    });
+  }
+});
+
 // Add or update the summaries endpoint
 app.get('/api/summaries', async (req, res) => {
   try {
@@ -548,583 +618,10 @@ app.get('/api/summary/:id', async (req, res) => {
   }
 });
 
-app.delete('/api/summary/:id', async (req, res) => {
-  try {
-    const summaryId = req.params.id;
-    
-    // Get user email from token
-    const token = req.headers.authorization?.split(' ')[1];
-    if (!token) {
-      return res.status(401).json({ error: 'No authorization token provided' });
-    }
-    
-    let userEmail;
-    try {
-      const decoded = jwt.verify(token, process.env.JWT_SECRET);
-      userEmail = decoded.email;
-    } catch (error) {
-      return res.status(401).json({ error: 'Invalid token' });
-    }
-    
-    // Get the summary to check if it exists and belongs to the user
-    const checkResult = await db.query(
-      `SELECT id, pdf_path
-       FROM summaries
-       WHERE id = $1 AND user_email = $2`,
-      [summaryId, userEmail]
-    );
-    
-    if (checkResult.rows.length === 0) {
-      return res.status(404).json({ error: 'Summary not found' });
-    }
-    
-    const summary = checkResult.rows[0];
-    
-    // Delete the PDF file if it exists
-    if (summary.pdf_path) {
-      try {
-        await unlink(summary.pdf_path);
-      } catch (unlinkError) {
-        console.error('Error deleting PDF file:', unlinkError);
-      }
-    }
-    
-    // Delete the summary from the database
-    await db.query(
-      `DELETE FROM summaries
-       WHERE id = $1`,
-      [summaryId]
-    );
-    
-    res.json({ message: 'Summary deleted successfully' });
-  } catch (error) {
-    console.error('Error deleting summary:', error);
-    res.status(500).json({ 
-      error: 'Error deleting summary', 
-      details: error.message 
-    });
-  }
-});
-
-// Add this middleware function to authenticate JWT tokens
-const authenticateToken = (req, res, next) => {
-  const authHeader = req.headers['authorization'];
-  const token = authHeader && authHeader.split(' ')[1];
-  
-  if (!token) {
-    return res.status(401).json({ error: 'Access denied. No token provided.' });
-  }
-  
-  try {
-    const decoded = jwt.verify(token, process.env.JWT_SECRET);
-    req.user = decoded;
-    next();
-  } catch (error) {
-    console.error('Token verification error:', error);
-    return res.status(403).json({ error: 'Invalid token.' });
-  }
-};
-
-// Also, fix the pool reference in the usage-status endpoint
-app.get('/api/usage-status', authenticateToken, async (req, res) => {
-  try {
-    const email = req.user.email;
-    
-    // Get the user from the database (using db instead of pool)
-    const user = await db.query(
-      'SELECT membership_type, usage_count FROM users WHERE email = $1',
-      [email]
-    );
-    
-    if (user.rows.length === 0) {
-      return res.status(404).json({ error: 'User not found' });
-    }
-    
-    const userData = user.rows[0];
-    
-    // Define usage limits based on membership level
-    const limits = {
-      free: 5,
-      basic: 20,
-      premium: 100,
-      unlimited: Infinity
-    };
-    
-    // Get the user's membership level (default to 'free' if not set)
-    const membershipLevel = userData.membership_type || 'free';
-    const usageCount = userData.usage_count || 0;
-    const usageLimit = limits[membershipLevel] || limits.free;
-    
-    // Calculate remaining usage
-    const remainingUsage = Math.max(0, usageLimit - usageCount);
-    
-    // Return the usage status
-    res.json({
-      membership: membershipLevel,
-      usageCount: usageCount,
-      usageLimit: usageLimit === Infinity ? 'unlimited' : usageLimit,
-      remainingUsage: usageLimit === Infinity ? 'unlimited' : remainingUsage,
-      canUseService: usageLimit === Infinity || usageCount < usageLimit
-    });
-    
-  } catch (error) {
-    console.error('Error getting usage status:', error);
-    res.status(500).json({ error: 'Failed to get usage status' });
-  }
-});
-
-// Add this endpoint to your Express app
-app.post('/api/transcribe/upload', authenticateToken, upload.single('audioFile'), async (req, res) => {
-  try {
-    if (!req.file) {
-      return res.status(400).json({ error: 'No audio file uploaded' });
-    }
-    
-    console.log(`Audio file uploaded: ${req.file.path}`);
-    console.log(`Original filename: ${req.file.originalname}`);
-    console.log(`File size: ${req.file.size} bytes`);
-    
-    // Get processing options from request body
-    const options = {
-      outputType: req.body.outputType || 'transcription',
-      includeTranscription: req.body.includeTranscription === 'true',
-      language: req.body.language || 'en',
-      summaryOptions: req.body.summaryOptions ? JSON.parse(req.body.summaryOptions) : {}
-    };
-    
-    console.log('Processing options:', options);
-    
-    // Process the uploaded file
-    const result = await processAudioFile(req.file.path, options);
-    
-    // Clean up the uploaded file
-    fs.unlinkSync(req.file.path);
-    
-    // Return the result
-    res.json(result);
-  } catch (error) {
-    console.error('Error processing uploaded audio:', error);
-    res.status(500).json({ error: error.message });
-  }
-});
-
-// Update your audio processing endpoint
-app.post('/api/process-audio', upload.single('audioFile'), async (req, res) => {
-  try {
-    console.log('Audio file upload request received');
-    
-    if (!req.file) {
-      return res.status(400).json({ 
-        error: 'No audio file uploaded',
-        success: false
-      });
-    }
-    
-    console.log(`Audio file uploaded: ${req.file.path}`);
-    
-    // Get user email from token
-    const token = req.headers.authorization?.split(' ')[1];
-    if (!token) {
-      return res.status(401).json({ error: 'No authorization token provided' });
-    }
-    
-    let userEmail;
-    try {
-      const decoded = jwt.verify(token, process.env.JWT_SECRET);
-      userEmail = decoded.email;
-    } catch (error) {
-      return res.status(401).json({ error: 'Invalid token' });
-    }
-    
-    // Process the uploaded file using the old implementation
-    const { processAudioFile } = await import('./Transcribe_and_summarize/audioProcessing.js');
-    const result = await processAudioFile(req.file.path, {
-      outputType: 'summary',
-      language: 'he'
-    });
-    
-    // Save the result to the database
-    const insertResult = await db.query(
-      `INSERT INTO summaries (user_email, file_name, summary, created_at)
-       VALUES ($1, $2, $3, NOW())
-       RETURNING id`,
-      [userEmail, req.file.originalname, result.summary]
-    );
-    
-    const summaryId = insertResult.rows[0].id;
-    
-    // Return the result
-    res.json({
-      id: summaryId,
-      summary: result.summary,
-      success: true
-    });
-  } catch (error) {
-    console.error('Error processing uploaded audio:', error);
-    res.status(500).json({ 
-      error: error.message,
-      success: false
-    });
-  }
-});
-
-// Add a route to handle larger file uploads through chunking if needed
-app.post('/api/upload-large-file', (req, res) => {
-  const busboy = require('busboy');
-  const bb = busboy({ headers: req.headers });
-  
-  let filePath = '';
-  let fileName = '';
-  
-  bb.on('file', (name, file, info) => {
-    fileName = info.filename;
-    filePath = path.join(__dirname, 'temp', `upload_${Date.now()}_${fileName}`);
-    file.pipe(fs.createWriteStream(filePath));
-  });
-  
-  bb.on('finish', async () => {
-    try {
-      console.log(`Large file uploaded: ${filePath}`);
-      
-      // Process the file
-      const { processAudioFile } = await import('./Transcribe_and_summarize/audioProcessing.js');
-      const result = await processAudioFile(filePath, {
-        outputType: 'summary',
-        summaryOptions: { language: 'he' }
-      });
-      
-      res.json({
-        ...result,
-        success: true
-      });
-    } catch (error) {
-      console.error('Error processing large file:', error);
-      res.status(500).json({ 
-        error: error.message,
-        success: false
-      });
-    }
-  });
-  
-  req.pipe(bb);
-});
-
-// Create a chunked file upload endpoint
-app.post('/api/upload-chunk', express.raw({ type: '*/*', limit: '10mb' }), async (req, res) => {
-  try {
-    // Get chunk information from headers
-    const chunkIndex = parseInt(req.headers['x-chunk-index']);
-    const totalChunks = parseInt(req.headers['x-total-chunks']);
-    const fileName = req.headers['x-file-name'];
-    const fileId = req.headers['x-file-id'] || uuidv4();
-    
-    console.log(`Received chunk ${chunkIndex + 1}/${totalChunks} for file ${fileName} (ID: ${fileId})`);
-    
-    // Create directory for chunks if it doesn't exist
-    const chunksDir = path.join(__dirname, 'temp', 'chunks', fileId);
-    if (!fs.existsSync(chunksDir)) {
-      fs.mkdirSync(chunksDir, { recursive: true });
-    }
-    
-    // Save the chunk
-    const chunkPath = path.join(chunksDir, `${chunkIndex}`);
-    fs.writeFileSync(chunkPath, req.body);
-    
-    // Check if all chunks have been uploaded
-    if (chunkIndex === totalChunks - 1) {
-      // All chunks received, combine them
-      const outputPath = path.join(__dirname, 'temp', `${fileId}_${fileName}`);
-      const outputStream = fs.createWriteStream(outputPath);
-      
-      // Combine chunks in order
-      for (let i = 0; i < totalChunks; i++) {
-        const chunkPath = path.join(chunksDir, `${i}`);
-        const chunkData = fs.readFileSync(chunkPath);
-        outputStream.write(chunkData);
-      }
-      
-      outputStream.end();
-      
-      // Wait for the file to be fully written
-      await new Promise(resolve => outputStream.on('finish', resolve));
-      
-      console.log(`All chunks combined into ${outputPath}`);
-      
-      // Clean up chunks
-      for (let i = 0; i < totalChunks; i++) {
-        fs.unlinkSync(path.join(chunksDir, `${i}`));
-      }
-      fs.rmdirSync(chunksDir);
-      
-      // Return the file ID and path for processing
-      res.json({
-        fileId,
-        fileName,
-        filePath: outputPath,
-        success: true,
-        complete: true
-      });
-    } else {
-      // More chunks expected
-      res.json({
-        fileId,
-        success: true,
-        complete: false,
-        chunksReceived: chunkIndex + 1,
-        totalChunks
-      });
-    }
-  } catch (error) {
-    console.error('Error handling chunk upload:', error);
-    res.status(500).json({
-      error: error.message,
-      success: false
-    });
-  }
-});
-
-// Add an endpoint to process the uploaded file
-app.post('/api/process-chunked-file', async (req, res) => {
-  try {
-    const { fileId, fileName, filePath } = req.body;
-    
-    if (!fileId || !fileName || !filePath) {
-      return res.status(400).json({
-        error: 'Missing file information',
-        success: false
-      });
-    }
-    
-    console.log(`Processing chunked file: ${fileName} (ID: ${fileId})`);
-    
-    // Get user email from token
-    const token = req.headers.authorization?.split(' ')[1];
-    if (!token) {
-      return res.status(401).json({ error: 'No authorization token provided' });
-    }
-    
-    let userEmail;
-    try {
-      const decoded = jwt.verify(token, process.env.JWT_SECRET);
-      userEmail = decoded.email;
-    } catch (error) {
-      return res.status(401).json({ error: 'Invalid token' });
-    }
-    
-    // Process the file
-    const { processAudioFile } = await import('./Transcribe_and_summarize/audioProcessing.js');
-    const result = await processAudioFile(filePath, {
-      outputType: 'summary',
-      language: 'he',
-      summaryOptions: { language: 'he' }
-    });
-    
-    // Save the result to the database
-    const insertResult = await db.query(
-      `INSERT INTO summaries (user_email, file_name, summary, created_at)
-       VALUES ($1, $2, $3, NOW())
-       RETURNING id`,
-      [userEmail, fileName, result.summary || result.transcription]
-    );
-    
-    const summaryId = insertResult.rows[0].id;
-    
-    // Clean up the file
-    fs.unlinkSync(filePath);
-    
-    // Return the result
-    res.json({
-      id: summaryId,
-      summary: result.summary || result.transcription,
-      success: true
-    });
-  } catch (error) {
-    console.error('Error processing chunked file:', error);
-    res.status(500).json({
-      error: error.message,
-      success: false
-    });
-  }
-});
-
-// Client-side chunked upload function
-async function uploadLargeFile(file) {
-  const chunkSize = 5 * 1024 * 1024; // 5MB chunks
-  const totalChunks = Math.ceil(file.size / chunkSize);
-  const fileId = Date.now().toString(); // Simple unique ID
-  
-  console.log(`Uploading file: ${file.name}, size: ${file.size} bytes, chunks: ${totalChunks}`);
-  
-  // Upload each chunk
-  for (let i = 0; i < totalChunks; i++) {
-    const start = i * chunkSize;
-    const end = Math.min(file.size, start + chunkSize);
-    const chunk = file.slice(start, end);
-    
-    console.log(`Uploading chunk ${i + 1}/${totalChunks}, size: ${chunk.size} bytes`);
-    
-    const token = localStorage.getItem('token'); // Or however you store your auth token
-    
-    try {
-      const response = await fetch('/api/upload-chunk', {
-        method: 'POST',
-        body: chunk,
-        headers: {
-          'Content-Type': 'application/octet-stream',
-          'X-Chunk-Index': i.toString(),
-          'X-Total-Chunks': totalChunks.toString(),
-          'X-File-Name': file.name,
-          'X-File-Id': fileId,
-          'Authorization': `Bearer ${token}`
-        }
-      });
-      
-      if (!response.ok) {
-        const errorText = await response.text();
-        throw new Error(`Chunk upload failed: ${response.status} ${errorText}`);
-      }
-      
-      const result = await response.json();
-      
-      // If this was the last chunk, process the file
-      if (result.complete) {
-        console.log('All chunks uploaded, processing file...');
-        
-        const processResponse = await fetch('/api/process-chunked-file', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${token}`
-          },
-          body: JSON.stringify({
-            fileId,
-            fileName: file.name,
-            filePath: result.filePath
-          })
-        });
-        
-        if (!processResponse.ok) {
-          const errorText = await processResponse.text();
-          throw new Error(`File processing failed: ${processResponse.status} ${errorText}`);
-        }
-        
-        return await processResponse.json();
-      }
-    } catch (error) {
-      console.error(`Error uploading chunk ${i + 1}:`, error);
-      throw error;
-    }
-  }
-}
-
-// Add a usage status endpoint
-app.get('/api/usage-status', async (req, res) => {
-  try {
-    // Get user email from token
-    const token = req.headers.authorization?.split(' ')[1];
-    if (!token) {
-      return res.status(401).json({ error: 'No authorization token provided' });
-    }
-    
-    let userEmail;
-    try {
-      const decoded = jwt.verify(token, process.env.JWT_SECRET);
-      userEmail = decoded.email;
-    } catch (error) {
-      return res.status(401).json({ error: 'Invalid token' });
-    }
-    
-    // Get user information
-    const userResult = await db.query(
-      `SELECT membership_type FROM users WHERE email = $1`,
-      [userEmail]
-    );
-    
-    if (userResult.rows.length === 0) {
-      return res.status(404).json({ error: 'User not found' });
-    }
-    
-    const membershipType = userResult.rows[0].membership_type;
-    
-    // Get usage statistics
-    const usageResult = await db.query(
-      `SELECT COUNT(*) as total_summaries FROM summaries WHERE user_email = $1`,
-      [userEmail]
-    );
-    
-    const totalSummaries = parseInt(usageResult.rows[0].total_summaries) || 0;
-    
-    // Define limits based on membership type
-    const limits = {
-      free: {
-        maxSummaries: 5,
-        maxFileSize: 50 * 1024 * 1024, // 50MB
-        features: ['basic_summaries']
-      },
-      premium: {
-        maxSummaries: 100,
-        maxFileSize: 500 * 1024 * 1024, // 500MB
-        features: ['basic_summaries', 'advanced_summaries', 'pdf_export']
-      }
-    };
-    
-    const userLimits = limits[membershipType] || limits.free;
-    
-    // Return usage information
-    res.json({
-      membershipType,
-      usage: {
-        summaries: totalSummaries,
-        remainingSummaries: Math.max(0, userLimits.maxSummaries - totalSummaries)
-      },
-      limits: userLimits,
-      success: true
-    });
-  } catch (error) {
-    console.error('Error getting usage status:', error);
-    res.status(500).json({ 
-      error: 'Error getting usage status', 
-      details: error.message 
-    });
-  }
-});
-
-// Add this wrapper function to maintain compatibility
-async function processAudioFile(filePath, options = {}) {
-  try {
-    const { transcribeAudio, summarizeText } = await import('./Transcribe_and_summarize/audioProcessing.js');
-    
-    // Transcribe the audio
-    const transcript = await transcribeAudio(filePath);
-    
-    // Return the transcription or summary based on options
-    if (options.outputType === 'transcription') {
-      return {
-        transcription: transcript,
-        success: true
-      };
-    } else if (options.outputType === 'summary') {
-      // Generate summary
-      const summary = await summarizeText(transcript, options.summaryOptions || {});
-      
-      return {
-        summary,
-        transcription: options.includeTranscription ? transcript : undefined,
-        success: true
-      };
-    } else {
-      throw new Error('Invalid output type specified');
-    }
-  } catch (error) {
-    console.error('Error processing audio file:', error);
-    throw new Error(`Failed to process audio file: ${error.message}`);
-  }
-}
-
 // Start the server
 app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
   
-  // Set up membership column
+  // Setup membership column
   setupMembershipColumn();
 });
