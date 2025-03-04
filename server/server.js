@@ -23,6 +23,7 @@ import { GoogleGenerativeAI } from '@google/generative-ai';
 import fs from 'fs';
 import puppeteer from 'puppeteer';
 import { processAudioFile } from './Transcribe_and_summarize/audio.js';
+import { v4 as uuidv4 } from 'uuid';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -834,6 +835,214 @@ app.post('/api/upload-large-file', (req, res) => {
   
   req.pipe(bb);
 });
+
+// Create a chunked file upload endpoint
+app.post('/api/upload-chunk', express.raw({ type: '*/*', limit: '10mb' }), async (req, res) => {
+  try {
+    // Get chunk information from headers
+    const chunkIndex = parseInt(req.headers['x-chunk-index']);
+    const totalChunks = parseInt(req.headers['x-total-chunks']);
+    const fileName = req.headers['x-file-name'];
+    const fileId = req.headers['x-file-id'] || uuidv4();
+    
+    console.log(`Received chunk ${chunkIndex + 1}/${totalChunks} for file ${fileName} (ID: ${fileId})`);
+    
+    // Create directory for chunks if it doesn't exist
+    const chunksDir = path.join(__dirname, 'temp', 'chunks', fileId);
+    if (!fs.existsSync(chunksDir)) {
+      fs.mkdirSync(chunksDir, { recursive: true });
+    }
+    
+    // Save the chunk
+    const chunkPath = path.join(chunksDir, `${chunkIndex}`);
+    fs.writeFileSync(chunkPath, req.body);
+    
+    // Check if all chunks have been uploaded
+    if (chunkIndex === totalChunks - 1) {
+      // All chunks received, combine them
+      const outputPath = path.join(__dirname, 'temp', `${fileId}_${fileName}`);
+      const outputStream = fs.createWriteStream(outputPath);
+      
+      // Combine chunks in order
+      for (let i = 0; i < totalChunks; i++) {
+        const chunkPath = path.join(chunksDir, `${i}`);
+        const chunkData = fs.readFileSync(chunkPath);
+        outputStream.write(chunkData);
+      }
+      
+      outputStream.end();
+      
+      // Wait for the file to be fully written
+      await new Promise(resolve => outputStream.on('finish', resolve));
+      
+      console.log(`All chunks combined into ${outputPath}`);
+      
+      // Clean up chunks
+      for (let i = 0; i < totalChunks; i++) {
+        fs.unlinkSync(path.join(chunksDir, `${i}`));
+      }
+      fs.rmdirSync(chunksDir);
+      
+      // Return the file ID and path for processing
+      res.json({
+        fileId,
+        fileName,
+        filePath: outputPath,
+        success: true,
+        complete: true
+      });
+    } else {
+      // More chunks expected
+      res.json({
+        fileId,
+        success: true,
+        complete: false,
+        chunksReceived: chunkIndex + 1,
+        totalChunks
+      });
+    }
+  } catch (error) {
+    console.error('Error handling chunk upload:', error);
+    res.status(500).json({
+      error: error.message,
+      success: false
+    });
+  }
+});
+
+// Add an endpoint to process the uploaded file
+app.post('/api/process-chunked-file', async (req, res) => {
+  try {
+    const { fileId, fileName, filePath } = req.body;
+    
+    if (!fileId || !fileName || !filePath) {
+      return res.status(400).json({
+        error: 'Missing file information',
+        success: false
+      });
+    }
+    
+    console.log(`Processing chunked file: ${fileName} (ID: ${fileId})`);
+    
+    // Get user email from token
+    const token = req.headers.authorization?.split(' ')[1];
+    if (!token) {
+      return res.status(401).json({ error: 'No authorization token provided' });
+    }
+    
+    let userEmail;
+    try {
+      const decoded = jwt.verify(token, process.env.JWT_SECRET);
+      userEmail = decoded.email;
+    } catch (error) {
+      return res.status(401).json({ error: 'Invalid token' });
+    }
+    
+    // Process the file
+    const { processAudioFile } = await import('./Transcribe_and_summarize/audio.js');
+    const result = await processAudioFile(filePath, {
+      outputType: 'summary',
+      language: 'he',
+      summaryOptions: { language: 'he' }
+    });
+    
+    // Save the result to the database
+    const insertResult = await db.query(
+      `INSERT INTO summaries (user_email, file_name, summary, created_at)
+       VALUES ($1, $2, $3, NOW())
+       RETURNING id`,
+      [userEmail, fileName, result.summary || result.transcription]
+    );
+    
+    const summaryId = insertResult.rows[0].id;
+    
+    // Clean up the file
+    fs.unlinkSync(filePath);
+    
+    // Return the result
+    res.json({
+      id: summaryId,
+      summary: result.summary || result.transcription,
+      success: true
+    });
+  } catch (error) {
+    console.error('Error processing chunked file:', error);
+    res.status(500).json({
+      error: error.message,
+      success: false
+    });
+  }
+});
+
+// Client-side chunked upload function
+async function uploadLargeFile(file) {
+  const chunkSize = 5 * 1024 * 1024; // 5MB chunks
+  const totalChunks = Math.ceil(file.size / chunkSize);
+  const fileId = Date.now().toString(); // Simple unique ID
+  
+  console.log(`Uploading file: ${file.name}, size: ${file.size} bytes, chunks: ${totalChunks}`);
+  
+  // Upload each chunk
+  for (let i = 0; i < totalChunks; i++) {
+    const start = i * chunkSize;
+    const end = Math.min(file.size, start + chunkSize);
+    const chunk = file.slice(start, end);
+    
+    console.log(`Uploading chunk ${i + 1}/${totalChunks}, size: ${chunk.size} bytes`);
+    
+    const token = localStorage.getItem('token'); // Or however you store your auth token
+    
+    try {
+      const response = await fetch('/api/upload-chunk', {
+        method: 'POST',
+        body: chunk,
+        headers: {
+          'Content-Type': 'application/octet-stream',
+          'X-Chunk-Index': i.toString(),
+          'X-Total-Chunks': totalChunks.toString(),
+          'X-File-Name': file.name,
+          'X-File-Id': fileId,
+          'Authorization': `Bearer ${token}`
+        }
+      });
+      
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`Chunk upload failed: ${response.status} ${errorText}`);
+      }
+      
+      const result = await response.json();
+      
+      // If this was the last chunk, process the file
+      if (result.complete) {
+        console.log('All chunks uploaded, processing file...');
+        
+        const processResponse = await fetch('/api/process-chunked-file', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`
+          },
+          body: JSON.stringify({
+            fileId,
+            fileName: file.name,
+            filePath: result.filePath
+          })
+        });
+        
+        if (!processResponse.ok) {
+          const errorText = await processResponse.text();
+          throw new Error(`File processing failed: ${processResponse.status} ${errorText}`);
+        }
+        
+        return await processResponse.json();
+      }
+    } catch (error) {
+      console.error(`Error uploading chunk ${i + 1}:`, error);
+      throw error;
+    }
+  }
+}
 
 // Start the server
 app.listen(PORT, () => {
