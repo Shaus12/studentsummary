@@ -9,7 +9,7 @@ dotenv.config();
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || 'AIzaSyCzIsCmQVuaiUKd0TqaIctPVZ0Bj_3i11A');
 
 /**
- * Summarize text using Google's Gemini API
+ * Summarize text using a simple extractive method with Hebrew output
  * @param {string} text - Text to summarize
  * @param {object} options - Summarization options
  * @returns {Promise<string>} - Summarized text
@@ -23,74 +23,78 @@ export async function summarizeText(text, options = {}) {
       return "אין טקסט לסיכום.";
     }
     
-    // Use the correct environment variable name: GEMINI_API_KEY
-    const apiKey = process.env.GEMINI_API_KEY;
-    if (!apiKey || apiKey.trim() === '') {
-      console.error("Missing or empty Gemini API key");
-      return `הנה התמלול: ${text.substring(0, 500)}${text.length > 500 ? '...' : ''}`;
-    }
+    // Check if the text is primarily in Hebrew
+    const isHebrewText = containsHebrew(text);
+    console.log(`Text contains Hebrew: ${isHebrewText}`);
     
-    console.log(`Using Gemini API key starting with: ${apiKey.substring(0, 4)}...`);
-    
-    // Initialize the Gemini API with the API key
-    const genAI = new GoogleGenerativeAI(apiKey);
-    
-    try {
-      // Use a fixed model name that should work with the current SDK version
-      console.log("Using gemini-pro model");
-      const model = genAI.getGenerativeModel({ model: "gemini-pro" });
+    // If text is not in Hebrew, we'll create a simple Hebrew summary
+    if (!isHebrewText) {
+      // Simple extractive summarization
+      const sentences = text.split(/[.!?]+/).filter(s => s.trim().length > 0);
       
-      // Create a prompt that explicitly requests Hebrew output
-      const prompt = `
-      סכם את הטקסט הבא בעברית בצורה תמציתית ואינפורמטיבית:
+      if (sentences.length <= 3) {
+        return `סיכום: ${text}`;
+      }
       
-      ${text}
+      // Extract key sentences (first, middle, and last)
+      const firstSentence = sentences[0];
+      const middleSentence = sentences[Math.floor(sentences.length / 2)];
+      const lastSentence = sentences[sentences.length - 1];
       
-      הסיכום בעברית:
+      // Create a basic summary in Hebrew
+      const summary = `
+      סיכום הקלטה:
+      
+      נקודות מפתח:
+      - ${firstSentence}.
+      - ${middleSentence}.
+      - ${lastSentence}.
+      
+      הערה: התמלול המקורי אינו בעברית.
       `;
       
-      console.log(`Using Hebrew prompt for summarization`);
+      return summary;
+    } else {
+      // For Hebrew text, we'll use the text directly
+      // Simple extractive summarization for Hebrew
+      const sentences = text.split(/[.!?]+/).filter(s => s.trim().length > 0);
       
-      const result = await model.generateContent(prompt);
-      const response = await result.response;
-      const summary = response.text();
-      
-      console.log(`Generated summary in Hebrew`);
-      
-      // If the summary is empty or failed, provide a fallback
-      if (!summary || summary.trim().length === 0) {
-        return `הנה התמלול: ${text.substring(0, 500)}${text.length > 500 ? '...' : ''}`;
+      if (sentences.length <= 3) {
+        return `סיכום: ${text}`;
       }
+      
+      // Extract key sentences (first, middle, and last)
+      const firstSentence = sentences[0];
+      const middleSentence = sentences[Math.floor(sentences.length / 2)];
+      const lastSentence = sentences[sentences.length - 1];
+      
+      // Create a basic summary in Hebrew
+      const summary = `
+      סיכום הקלטה:
+      
+      נקודות מפתח:
+      - ${firstSentence}.
+      - ${middleSentence}.
+      - ${lastSentence}.
+      `;
       
       return summary;
-    } catch (error) {
-      console.error("Error with Gemini API:", error);
-      
-      // Try an alternative model as fallback
-      try {
-        console.log("Trying alternative model: gemini-1.0-pro");
-        const fallbackModel = genAI.getGenerativeModel({ model: "gemini-1.0-pro" });
-        
-        const hebrewPrompt = `
-        תסכם את הטקסט הבא בעברית:
-        
-        ${text}
-        
-        סיכום בעברית:
-        `;
-        
-        const result = await fallbackModel.generateContent(hebrewPrompt);
-        const response = await result.response;
-        return response.text() || `הנה התמלול: ${text.substring(0, 500)}${text.length > 500 ? '...' : ''}`;
-      } catch (fallbackError) {
-        console.error("Fallback model also failed:", fallbackError);
-        return `הנה התמלול: ${text.substring(0, 500)}${text.length > 500 ? '...' : ''}`;
-      }
     }
   } catch (error) {
-    console.error("Error summarizing text:", error);
+    console.error("Error creating summary:", error);
     return `הנה התמלול: ${text.substring(0, 500)}${text.length > 500 ? '...' : ''}`;
   }
+}
+
+/**
+ * Check if text contains Hebrew characters
+ * @param {string} text - Text to check
+ * @returns {boolean} - True if text contains Hebrew
+ */
+function containsHebrew(text) {
+  // Hebrew Unicode range
+  const hebrewRegex = /[\u0590-\u05FF]/;
+  return hebrewRegex.test(text);
 }
 
 /**

@@ -67,146 +67,48 @@ const convertAudioFormat = async (inputPath) => {
  * @param {object} options - Transcription options
  * @returns {Promise<string>} - Transcription text
  */
-export async function transcribeAudio(filePath, language) {
+export async function transcribeAudio(filePath, language = 'auto') {
   try {
     console.log(`Transcribing audio file: ${filePath} with language: ${language}`);
     
-    // Check if file exists
-    if (!fs.existsSync(filePath)) {
-      throw new Error(`File not found: ${filePath}`);
-    }
+    // Convert audio to WAV format for better compatibility
+    const convertedFilePath = await convertAudioToWav(filePath);
     
-    // Convert the audio file to a format Deepgram can handle
-    const convertedFilePath = await convertAudioFile(filePath);
-    console.log(`Converted audio file to: ${convertedFilePath}`);
+    // Read the audio file
+    const audioFile = await fs.promises.readFile(convertedFilePath);
     
-    // Determine the appropriate language parameter based on the input
-    let deepgramLanguage = language;
-    if (language === 'auto') {
-      deepgramLanguage = null; // Let Deepgram auto-detect
-    }
-    
-    // Configure options for Deepgram API v3
+    // Configure Deepgram options
+    // If the language is Hebrew, specify it
     const options = {
       smart_format: true,
       model: "nova-2",
       diarize: true,
       utterances: true,
-      punctuate: true,
+      punctuate: true
     };
     
-    // Only add language if it's specified (not auto)
-    if (deepgramLanguage) {
-      options.language = deepgramLanguage;
+    // If language is specifically set to Hebrew, add it to options
+    if (language === 'he' || language === 'hebrew' || language === 'Hebrew') {
+      options.language = 'he';
     }
     
-    console.log("Sending request to Deepgram with options:", JSON.stringify(options));
+    console.log(`Sending request to Deepgram with options:`, options);
     
-    // Create the Deepgram client using the v3 SDK format
-    const deepgram = createClient(process.env.DEEPGRAM_API_KEY);
+    // Send to Deepgram for transcription
+    const response = await deepgram.transcription.preRecorded(
+      { buffer: audioFile, mimetype: 'audio/wav' },
+      options
+    );
     
-    // Try a different approach - use the REST API directly
-    const fileStats = fs.statSync(convertedFilePath);
-    const fileSize = fileStats.size;
+    // Clean up the converted file
+    await cleanupFile(convertedFilePath);
     
-    // Read the file as a buffer
-    const audioBuffer = fs.readFileSync(convertedFilePath);
+    console.log(`Deepgram response:`, JSON.stringify(response));
     
-    // Make a direct API call to Deepgram
-    const url = 'https://api.deepgram.com/v1/listen';
-    
-    // Create a promise to handle the HTTP request
-    const response = await new Promise((resolve, reject) => {
-      const req = https.request(
-        url,
-        {
-          method: 'POST',
-          headers: {
-            'Authorization': `Token ${process.env.DEEPGRAM_API_KEY}`,
-            'Content-Type': 'audio/wav',
-            'Content-Length': fileSize
-          }
-        },
-        (res) => {
-          let data = '';
-          res.on('data', (chunk) => {
-            data += chunk;
-          });
-          res.on('end', () => {
-            try {
-              const jsonResponse = JSON.parse(data);
-              resolve(jsonResponse);
-            } catch (e) {
-              reject(new Error(`Failed to parse Deepgram response: ${e.message}`));
-            }
-          });
-        }
-      );
-      
-      req.on('error', (error) => {
-        reject(error);
-      });
-      
-      // Write the audio buffer to the request
-      req.write(audioBuffer);
-      req.end();
-    });
-    
-    // Clean up the converted file if it's different from the original
-    if (convertedFilePath !== filePath && fs.existsSync(convertedFilePath)) {
-      fs.unlinkSync(convertedFilePath);
-      console.log(`Cleaned up temporary converted file: ${convertedFilePath}`);
-    }
-    
-    console.log("Deepgram response:", JSON.stringify(response));
-    
-    // Extract transcript from the response
-    let transcript = '';
-    let paragraphs = [];
-    
-    if (response && response.results && response.results.channels && response.results.channels.length > 0) {
-      // Extract the full transcript
-      transcript = response.results.channels[0].alternatives[0]?.transcript || '';
-      
-      // Extract paragraphs/utterances if available
-      if (response.results.utterances && response.results.utterances.length > 0) {
-        paragraphs = response.results.utterances.map(utterance => ({
-          text: utterance.transcript,
-          start: utterance.start,
-          end: utterance.end,
-          speaker: utterance.speaker || 0
-        }));
-      } else {
-        // Fallback if no utterances
-        paragraphs = [{ text: transcript, start: 0, end: 0, speaker: 0 }];
-      }
-    } else {
-      console.error("Unexpected response structure from Deepgram:", JSON.stringify(response));
-      
-      // If there's an error in the response, extract it
-      if (response.error) {
-        throw new Error(`Deepgram error: ${JSON.stringify(response.error)}`);
-      } else {
-        throw new Error("Invalid response structure from Deepgram");
-      }
-    }
-    
-    return { transcript, paragraphs };
+    return response;
   } catch (error) {
-    console.error("Error with Deepgram API:", error);
-    
-    // Improved error handling with more context
-    if (error.response) {
-      try {
-        console.error("Deepgram error response:", JSON.stringify(error.response));
-      } catch (e) {
-        console.error("Deepgram error response (non-JSON):", error.response);
-      }
-    }
-    
-    // Try to extract more meaningful error message
-    const errorMessage = error.message || "Unknown error";
-    throw new Error(`Failed to transcribe with Deepgram: ${errorMessage}`);
+    console.error('Error transcribing audio:', error);
+    throw error;
   }
 }
 
@@ -275,18 +177,18 @@ export const processAudioFile = async (filePath, options = {}) => {
 /**
  * Processes uploaded audio/video file
  * @param {string} filePath - Path to audio/video file
- * @param {string} outputType - Output type (summary or pdf)
+ * @param {object} options - Processing options
  * @returns {Promise<object>} - Result object with summary and PDF path
  */
-export async function processUploadedFile(filePath, outputType = 'summary') {
+export async function processUploadedFile(filePath, options = {}) {
   try {
     console.log(`Processing uploaded file: ${filePath}`);
     
     // Step 1: Transcribe the audio
-    const transcription = await transcribeAudio(filePath, 'auto');
+    const transcription = await transcribeAudio(filePath, options.language || 'auto');
 
     // Step 2: Break transcription into chunks
-    const words = transcription.transcript.split(" ");
+    const words = transcription.results.channels[0].alternatives[0].transcript.split(" ");
     const chunkSize = 1500;
     const chunks = [];
 
@@ -298,17 +200,17 @@ export async function processUploadedFile(filePath, outputType = 'summary') {
     const summaries = [];
     for (const [index, chunk] of chunks.entries()) {
       console.log(`Summarizing chunk ${index + 1}/${chunks.length}...`);
-      const summary = await summarizeText(chunk);
+      const summary = await summarizeText(chunk, options);
       summaries.push(summary);
     }
 
     // Step 4: Combine all summaries into a final summary
-    const finalSummary = await summarizeText(summaries.join(" "));
+    const finalSummary = await summarizeText(summaries.join(" "), options);
     console.log("הנה הסיכום שלך:", finalSummary);
 
     // Step 5: Generate PDF if requested
     let pdfPath = null;
-    if (outputType === 'pdf') {
+    if (options.outputType === 'pdf') {
       const { generatePDF } = await import('./pdf.js');
       pdfPath = await generatePDF(finalSummary);
     }

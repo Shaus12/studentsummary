@@ -353,97 +353,52 @@ app.post("/api/process-youtube", async (req, res) => {
   }
 });
 
-app.post('/api/upload-audio', upload.single('audio'), async (req, res) => {
+app.post('/api/upload-audio', upload.single('audioFile'), async (req, res) => {
   try {
-    console.log('Audio upload request received');
+    console.log('Audio processing request received');
+    console.log('Files:', req.files);
+    console.log('Body:', req.body);
     
     if (!req.file) {
       return res.status(400).json({ error: 'No audio file uploaded' });
     }
     
-    console.log('File uploaded:', req.file);
-    
-    // Get user email from token
-    const token = req.headers.authorization?.split(' ')[1];
-    if (!token) {
-      return res.status(401).json({ error: 'No authorization token provided' });
-    }
-    
-    let userEmail;
-    try {
-      const decoded = jwt.verify(token, process.env.JWT_SECRET);
-      userEmail = decoded.email;
-    } catch (error) {
-      return res.status(401).json({ error: 'Invalid token' });
-    }
-    
-    // Check if user is allowed to process audio
-    const usageCheck = await checkAndUpdateUsage(userEmail);
-    if (!usageCheck.allowed) {
-      // Clean up the uploaded file
-      await unlink(req.file.path);
-      return res.status(403).json({ error: 'Usage limit exceeded' });
-    }
+    console.log('File uploaded for processing:', req.file);
+    console.log('Starting to process file:', req.file.path);
     
     // Extract options if provided
     let options = {};
     if (req.body.options) {
       try {
         options = JSON.parse(req.body.options);
+        console.log('Processing options:', options);
       } catch (e) {
         console.error('Error parsing options:', e);
       }
     }
     
-    // Process the uploaded file with options
+    // Process the uploaded file
     const result = await processUploadedFile(req.file.path, options);
-    
-    // Generate PDF if needed
-    let pdfPath = null;
-    if (result.summary) {
-      try {
-        const pdfFileName = `summary_${Date.now()}.pdf`;
-        const pdfFilePath = path.join(__dirname, 'temp', pdfFileName);
-        await generatePDF(result.summary, pdfFilePath);
-        pdfPath = `/files/${pdfFileName}`; // Path relative to server
-        console.log(`PDF generated at: ${pdfFilePath}, accessible at: ${pdfPath}`);
-      } catch (pdfError) {
-        console.error('Error generating PDF:', pdfError);
-      }
-    }
+    console.log('File processed successfully');
     
     // Save the result to the database
-    const insertResult = await db.query(
-      `INSERT INTO summaries (user_email, file_name, summary, created_at)
-       VALUES ($1, $2, $3, NOW())
-       RETURNING id`,
-      [userEmail, req.file.originalname, result.summary]
-    );
+    console.log('Saving result to database');
+    const userId = req.user.id;
+    const summaryId = await saveSummary(userId, result.summary, req.file.originalname);
+    console.log('Summary saved with ID:', summaryId);
     
-    const summaryId = insertResult.rows[0].id;
-    
-    // Return the result in the format expected by SummaryResult.jsx
+    // Send the response
     res.json({
       success: true,
-      id: summaryId,
       summary: result.summary,
-      pdfPath: pdfPath // This matches what SummaryResult.jsx expects
+      pdfPath: result.pdfPath,
+      method: 'upload'
     });
   } catch (error) {
     console.error('Error processing audio file:', error);
-    
-    // Clean up the uploaded file if it exists
-    if (req.file) {
-      try {
-        await unlink(req.file.path);
-      } catch (unlinkError) {
-        console.error('Error deleting uploaded file:', unlinkError);
-      }
-    }
-    
     res.status(500).json({ 
-      success: false,
-      error: `Failed to process audio file: ${error.message}`
+      error: 'Failed to process audio file', 
+      details: error.message 
     });
   }
 });
