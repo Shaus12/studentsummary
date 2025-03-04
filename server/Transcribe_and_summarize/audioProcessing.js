@@ -42,10 +42,21 @@ async function convertAudioFile(filePath) {
     
     console.log(`Converting audio file from ${filePath} to ${outputPath}`);
     
-    // Use ffmpeg to convert the file to WAV format
-    await execAsync(`ffmpeg -i "${filePath}" -acodec pcm_s16le -ar 16000 -ac 1 "${outputPath}"`);
+    // Use ffmpeg with different parameters for better compatibility
+    // -vn: Disable video
+    // -ac 1: Convert to mono
+    // -ar 16000: Set sample rate to 16kHz
+    // -acodec pcm_s16le: Use 16-bit PCM encoding
+    // -f wav: Force WAV format
+    await execAsync(`ffmpeg -y -i "${filePath}" -vn -ac 1 -ar 16000 -acodec pcm_s16le -f wav "${outputPath}"`);
     
     console.log(`Converted audio file to: ${outputPath}`);
+    
+    // Verify the file exists and has content
+    if (!fs.existsSync(outputPath) || fs.statSync(outputPath).size === 0) {
+      throw new Error(`Conversion failed: Output file ${outputPath} does not exist or is empty`);
+    }
+    
     return outputPath;
   } catch (error) {
     console.error("Error converting audio file:", error);
@@ -85,11 +96,12 @@ export async function transcribeAudio(filePath) {
     
     // Read the converted audio file
     const audioFile = fs.readFileSync(convertedFilePath);
+    console.log(`Converted file size: ${audioFile.length} bytes`);
     
     // Configure Deepgram options
     const options = {
       smart_format: true,
-      model: "whisper-large",
+      model: "nova-2",  // Try a different model
       diarize: true,
       utterances: true,
       punctuate: true,
@@ -103,6 +115,8 @@ export async function transcribeAudio(filePath) {
       { buffer: audioFile, mimetype: 'audio/wav' },
       options
     );
+    
+    console.log(`Deepgram response:`, JSON.stringify(response).substring(0, 200) + '...');
     
     // Clean up the converted file
     await cleanupFile(convertedFilePath);
