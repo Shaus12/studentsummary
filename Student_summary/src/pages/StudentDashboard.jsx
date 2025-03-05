@@ -174,7 +174,7 @@ const StudentDashboard = () => {
       setLoading(true);
       
       const token = localStorage.getItem('token');
-      fetch('http://localhost:5001/api/process-audio', {
+      fetch('http://207.154.192.212:5001/api/process-audio', {  // Use the actual server URL
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${token}`
@@ -183,6 +183,7 @@ const StudentDashboard = () => {
       })
       .then(response => response.json())
       .then(data => {
+        console.log("Received response:", data);  // Debug log
         if (data.success) {
           // Navigate to summary result with the data
           navigate('/summary-result', { 
@@ -196,11 +197,13 @@ const StudentDashboard = () => {
           fetchSummaries();
           setFile(null);
           setLoading(false);
+          alert(data.error || 'Error processing file');
         }
       })
       .catch(error => {
         console.error('Error processing file:', error);
         setLoading(false);
+        alert('Error processing file: ' + error.message);
       });
     }
   };
@@ -217,7 +220,7 @@ const StudentDashboard = () => {
       setLoading(true);
       
       const token = localStorage.getItem('token');
-      fetch('http://localhost:5001/api/process-audio', {
+      fetch('http://207.154.192.212:5001/api/process-audio', {  // Use the actual server URL
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${token}`
@@ -226,6 +229,7 @@ const StudentDashboard = () => {
       })
       .then(response => response.json())
       .then(data => {
+        console.log("Received response:", data);  // Debug log
         if (data.success) {
           // Navigate to summary result with the data
           navigate('/summary-result', { 
@@ -239,11 +243,13 @@ const StudentDashboard = () => {
           fetchSummaries();
           setFile(null);
           setLoading(false);
+          alert(data.error || 'Error processing file');
         }
       })
       .catch(error => {
         console.error('Error processing file:', error);
         setLoading(false);
+        alert('Error processing file: ' + error.message);
       });
     }
   };
@@ -307,6 +313,19 @@ const StudentDashboard = () => {
     }
   };
 
+  const handleSubmit = (e) => {
+    e.preventDefault();
+    
+    if (file) {
+      // If there's a file, trigger the file upload
+      const event = { target: { files: [file] } };
+      handleFileChange(event);
+    } else if (youtubeUrl) {
+      // Handle YouTube URL submission
+      handleYouTubeSubmit(e);
+    }
+  };
+
   return (
     <div className="min-h-screen bg-white text-gray-800 rtl font-sans" dir="rtl">
       <Navbar />
@@ -350,7 +369,7 @@ const StudentDashboard = () => {
                 <p className="text-gray-500 font-sans">גרור לכאן קובץ או הדבק קישור ליוטיוב</p>
               </div>
               
-              <form onSubmit={handleYouTubeSubmit} className="flex flex-col items-center space-y-4 w-full max-w-md">
+              <form onSubmit={handleSubmit} className="flex flex-col items-center space-y-4 w-full max-w-md">
                 {isUsageLimitReached && (
                   <div className="bg-yellow-100 border border-yellow-400 text-yellow-700 px-4 py-3 rounded relative" role="alert">
                     <strong className="font-bold">שים לב! </strong>

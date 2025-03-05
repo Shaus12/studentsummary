@@ -12,9 +12,10 @@ const SummaryResult = () => {
 
   const handleDownloadPDF = () => {
     if (pdfPath) {
-      // Add the server URL to the PDF path
-      const fullPdfUrl = `http://localhost:5001${pdfPath}`;
-      console.log('Attempting to open PDF at:', fullPdfUrl); // Debug log
+      // Use the server's IP address instead of localhost
+      const serverUrl = 'http://207.154.192.212:5001'; // Replace with your actual server URL
+      const fullPdfUrl = `${serverUrl}${pdfPath}`;
+      console.log('Attempting to open PDF at:', fullPdfUrl);
       window.open(fullPdfUrl, '_blank');
     } else {
       console.error('No PDF path available');

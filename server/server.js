@@ -412,10 +412,11 @@ app.post('/api/upload-audio', upload.single('audioFile'), async (req, res) => {
     await cleanupFile(req.file.path);
     
     // Send the response
+    const fullPdfUrl = `http://localhost:5001${pdfPath}`;
     res.json({
       success: true,
       summary: result.summary,
-      pdfPath: result.pdfPath,
+      pdfPath: fullPdfUrl,
       method: 'upload'
     });
   } catch (error) {
@@ -496,10 +497,11 @@ app.post('/api/process-audio', upload.any(), async (req, res) => {
     console.log('File processed successfully');
     
     // Return the summary and pdfPath directly
+    const fullPdfUrl = `http://localhost:5001${pdfPath}`;
     res.json({ 
       success: true,
       summary: summary,
-      pdfPath: relativePdfPath
+      pdfPath: fullPdfUrl
     });
     
   } catch (error) {
