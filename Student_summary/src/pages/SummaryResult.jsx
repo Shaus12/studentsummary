@@ -7,12 +7,17 @@ const SummaryResult = () => {
   const navigate = useNavigate();
   const { summary, pdfPath } = location.state || {};
 
+  console.log('Summary state:', location.state);
+  console.log('PDF path:', pdfPath);
+
   const handleDownloadPDF = () => {
     if (pdfPath) {
       // Add the server URL to the PDF path
       const fullPdfUrl = `http://localhost:5001${pdfPath}`;
       console.log('Attempting to open PDF at:', fullPdfUrl); // Debug log
       window.open(fullPdfUrl, '_blank');
+    } else {
+      console.error('No PDF path available');
     }
   };
 

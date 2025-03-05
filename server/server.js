@@ -474,6 +474,12 @@ app.post('/api/process-audio', upload.any(), async (req, res) => {
     const summary = await summarizeText(transcript);
     const pdfPath = await generatePDF(summary);
     
+    console.log('PDF generated at path:', pdfPath);
+    
+    // Format the PDF path correctly for client access
+    const relativePdfPath = pdfPath ? `/files/${path.basename(pdfPath)}` : null;
+    console.log('Relative PDF path for client:', relativePdfPath);
+    
     // Save to database
     const result = await db.query(
       `INSERT INTO summaries (user_email, summary, pdf_path, file_name, created_at)
@@ -489,11 +495,11 @@ app.post('/api/process-audio', upload.any(), async (req, res) => {
     
     console.log('File processed successfully');
     
-    // Return the summary and pdfPath directly instead of redirecting
+    // Return the summary and pdfPath directly
     res.json({ 
       success: true,
       summary: summary,
-      pdfPath: pdfPath ? `/files/${path.basename(pdfPath)}` : null
+      pdfPath: relativePdfPath
     });
     
   } catch (error) {
