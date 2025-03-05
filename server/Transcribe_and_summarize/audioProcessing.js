@@ -99,41 +99,30 @@ async function uploadFileToTemporaryStorage(filePath) {
  * @returns {Promise<string>} - Transcription text
  */
 export async function transcribeAudio(filePath) {
-  let convertedFilePath = null;
-  
   try {
     console.log(`Transcribing audio file: ${filePath}`);
     console.log(`Using Deepgram API key: ${deepgramApiKey?.substring(0, 5)}...`);
     
-    // Convert the audio file to a format Deepgram can handle
-    convertedFilePath = await convertAudioFile(filePath);
-    
-    // Read the converted audio file
-    const audioFile = fs.readFileSync(convertedFilePath);
-    console.log(`Converted file size: ${audioFile.length} bytes`);
+    // Read the audio file directly
+    const audioFile = fs.readFileSync(filePath);
+    console.log(`Original file size: ${audioFile.length} bytes`);
     
     // Configure Deepgram options for Whisper with Hebrew
     const options = {
       smart_format: true,
       model: "whisper",
-      diarize: true,
-      utterances: true,
-      punctuate: true,
       language: 'he'
     };
     
     console.log(`Sending request to Deepgram with options:`, options);
     
-    // Send to Deepgram for transcription
+    // Send to Deepgram for transcription - using the original file directly
     const response = await deepgram.listen.prerecorded.transcribeFile(
-      { buffer: audioFile, mimetype: 'audio/wav' },
+      { buffer: audioFile, mimetype: 'audio/mpeg' },
       options
     );
     
     console.log(`Deepgram response:`, JSON.stringify(response).substring(0, 200) + '...');
-    
-    // Clean up the converted file
-    await cleanupFile(convertedFilePath);
     
     // Check if response is valid
     if (!response || !response.results) {
@@ -148,12 +137,6 @@ export async function transcribeAudio(filePath) {
     return transcript;
   } catch (error) {
     console.error('Error transcribing audio:', error);
-    
-    // Clean up the converted file if it exists
-    if (convertedFilePath) {
-      await cleanupFile(convertedFilePath);
-    }
-    
     return "אירעה שגיאה בתמלול הקובץ. אנא נסה שוב מאוחר יותר.";
   }
 }
