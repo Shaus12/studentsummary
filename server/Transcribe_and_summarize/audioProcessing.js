@@ -37,13 +37,13 @@ const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
  */
 async function convertAudioFile(filePath) {
   try {
-    // Create output path with mp3 extension (Whisper was trained on mp3 files)
-    const outputPath = filePath.replace(/\.[^/.]+$/, '') + '_converted.mp3';
+    // Create output path with wav extension
+    const outputPath = filePath.replace(/\.[^/.]+$/, '') + '_converted.wav';
     
     console.log(`Converting audio file from ${filePath} to ${outputPath}`);
     
-    // Use ffmpeg to normalize and convert the audio
-    await execAsync(`ffmpeg -y -i "${filePath}" -af "loudnorm=I=-16:LRA=11:TP=-1.5" -ar 16000 -ac 1 "${outputPath}"`);
+    // Use ffmpeg with very basic parameters to create a clean WAV file
+    await execAsync(`ffmpeg -y -i "${filePath}" -acodec pcm_s16le -ac 1 -ar 16000 "${outputPath}"`);
     
     console.log(`Converted audio file to: ${outputPath}`);
     
@@ -126,7 +126,7 @@ export async function transcribeAudio(filePath) {
     
     // Send to Deepgram for transcription
     const response = await deepgram.listen.prerecorded.transcribeFile(
-      { buffer: audioFile, mimetype: 'audio/mp3' },
+      { buffer: audioFile, mimetype: 'audio/wav' },
       options
     );
     
