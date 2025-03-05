@@ -202,12 +202,7 @@ const StudentDashboard = () => {
             pdfPath: data.pdfPath
           });
           
-          // Store the processed data
-          setProcessedSummary(data.summary);
-          setProcessedPdfPath(data.pdfPath);
-          setProcessingComplete(true);
-          
-          // Store in localStorage as a fallback
+          // Store the processed data in localStorage
           localStorage.setItem('lastProcessedSummary', JSON.stringify({
             summary: data.summary,
             pdfPath: data.pdfPath
@@ -216,8 +211,10 @@ const StudentDashboard = () => {
           // Refresh summaries list
           fetchSummaries();
           
-          // Show alert
-          alert('הקובץ עובד בהצלחה! לחץ על הקישור לצפייה בסיכום.');
+          // Use window.location for navigation
+          if (confirm('הקובץ עובד בהצלחה! האם ברצונך לצפות בסיכום?')) {
+            window.location.href = '/summary-result';
+          }
         } else {
           console.log("Error in response:", data.error);
           // Fallback - refresh summaries list
@@ -271,12 +268,7 @@ const StudentDashboard = () => {
             pdfPath: data.pdfPath
           });
           
-          // Store the processed data
-          setProcessedSummary(data.summary);
-          setProcessedPdfPath(data.pdfPath);
-          setProcessingComplete(true);
-          
-          // Store in localStorage as a fallback
+          // Store the processed data in localStorage
           localStorage.setItem('lastProcessedSummary', JSON.stringify({
             summary: data.summary,
             pdfPath: data.pdfPath
@@ -285,8 +277,10 @@ const StudentDashboard = () => {
           // Refresh summaries list
           fetchSummaries();
           
-          // Show alert
-          alert('הקובץ עובד בהצלחה! לחץ על הקישור לצפייה בסיכום.');
+          // Use window.location for navigation
+          if (confirm('הקובץ עובד בהצלחה! האם ברצונך לצפות בסיכום?')) {
+            window.location.href = '/summary-result';
+          }
         } else {
           console.log("Error in response:", data.error);
           // Fallback - refresh summaries list

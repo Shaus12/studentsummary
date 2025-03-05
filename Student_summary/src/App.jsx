@@ -1,5 +1,5 @@
 import React from 'react';
-import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
+import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import { GoogleOAuthProvider } from '@react-oauth/google';
 import Navbar from './components/Navbar';
 import Home from './pages/Home';
@@ -12,7 +12,7 @@ import SummaryResult from './pages/SummaryResult';
 function App() {
   return (
     <GoogleOAuthProvider clientId="223517881477-ncfrafhp355dj8c3rc99a124jrgnf4f1.apps.googleusercontent.com">
-      <Router>
+      <BrowserRouter>
         <div className="min-h-screen bg-white">
           <Navbar />
           <div className="pt-16">
@@ -26,7 +26,7 @@ function App() {
             </Routes>
           </div>
         </div>
-      </Router>
+      </BrowserRouter>
     </GoogleOAuthProvider>
   );
 }
