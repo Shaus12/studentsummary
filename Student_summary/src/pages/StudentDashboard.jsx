@@ -122,22 +122,16 @@ const StudentDashboard = () => {
     }
   };
 
-  const handleFileUpload = async (e) => {
-    if (usageData?.membershipType === 'free' && usageData?.remainingUses <= 0) {
-      alert('You have reached your weekly limit. Please upgrade to premium for unlimited use.');
-      return;
-    }
-
-    const file = e.target.files[0];
+  const handleFileSubmit = async (e) => {
+    e.preventDefault();
     if (!file) return;
-
-    setSelectedFile(file);
+    
     setLoading(true);
-
+    
+    const formData = new FormData();
+    formData.append('audioFile', file);
+    
     try {
-      const formData = new FormData();
-      formData.append('audioFile', file);
-
       const token = localStorage.getItem('token');
       const response = await fetch('http://localhost:5001/api/process-audio', {
         method: 'POST',
@@ -146,21 +140,101 @@ const StudentDashboard = () => {
         },
         body: formData
       });
-
-      if (!response.ok) {
-        throw new Error('Failed to process audio file');
-      }
-
+      
       const data = await response.json();
-      fetchSummaries();
-      fetchUsageStatus();
-      alert('File processed successfully!');
+      
+      if (data.success && data.redirectUrl) {
+        // Redirect to the summary page
+        navigate(data.redirectUrl);
+      } else {
+        // Fallback - refresh summaries list
+        fetchSummaries();
+        setFile(null);
+        setLoading(false);
+      }
     } catch (error) {
-      console.error('Error:', error);
-      alert('Error processing file');
-    } finally {
+      console.error('Error processing file:', error);
       setLoading(false);
-      setSelectedFile(null);
+    }
+  };
+
+  const handleDrop = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setDragActive(false);
+    
+    if (e.dataTransfer.files && e.dataTransfer.files[0]) {
+      const droppedFile = e.dataTransfer.files[0];
+      setFile(droppedFile);
+      
+      // Automatically submit the form when a file is dropped
+      const formData = new FormData();
+      formData.append('audioFile', droppedFile);
+      
+      setLoading(true);
+      
+      const token = localStorage.getItem('token');
+      fetch('http://localhost:5001/api/process-audio', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`
+        },
+        body: formData
+      })
+      .then(response => response.json())
+      .then(data => {
+        if (data.success && data.redirectUrl) {
+          // Redirect to the summary page
+          navigate(data.redirectUrl);
+        } else {
+          // Fallback - refresh summaries list
+          fetchSummaries();
+          setFile(null);
+          setLoading(false);
+        }
+      })
+      .catch(error => {
+        console.error('Error processing file:', error);
+        setLoading(false);
+      });
+    }
+  };
+
+  const handleFileChange = (e) => {
+    if (e.target.files && e.target.files[0]) {
+      const selectedFile = e.target.files[0];
+      setFile(selectedFile);
+      
+      // Automatically submit the form when a file is selected
+      const formData = new FormData();
+      formData.append('audioFile', selectedFile);
+      
+      setLoading(true);
+      
+      const token = localStorage.getItem('token');
+      fetch('http://localhost:5001/api/process-audio', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`
+        },
+        body: formData
+      })
+      .then(response => response.json())
+      .then(data => {
+        if (data.success && data.redirectUrl) {
+          // Redirect to the summary page
+          navigate(data.redirectUrl);
+        } else {
+          // Fallback - refresh summaries list
+          fetchSummaries();
+          setFile(null);
+          setLoading(false);
+        }
+      })
+      .catch(error => {
+        console.error('Error processing file:', error);
+        setLoading(false);
+      });
     }
   };
 
@@ -274,27 +348,37 @@ const StudentDashboard = () => {
                   </div>
                 )}
                 {/* File Upload Section */}
-                <input 
+                <div className="w-full">
+                  <label 
+                    htmlFor="file-upload" 
+                    className="cursor-pointer flex items-center justify-center px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 font-sans"
+                  >
+                    <span>בחר קובץ אודיו או וידאו</span>
+                    <input
+                      id="file-upload"
+                      name="file-upload"
+                      type="file"
+                      className="sr-only"
+                      onChange={handleFileChange}
+                      accept="audio/*,video/*"
+                    />
+                  </label>
+                  {file && (
+                    <div className="mt-2 text-sm text-gray-500 font-sans">
+                      {file.name}
+                    </div>
+                  )}
+                </div>
+                
+                <span className="text-gray-500 font-sans">- או -</span>
+                
+                <input
                   type="text" 
                   value={youtubeUrl}
                   onChange={(e) => setYoutubeUrl(e.target.value)}
                   placeholder="הדבק קישור YouTube כאן..."
                   className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:border-blue-500 focus:ring-1 focus:ring-blue-500 font-sans"
                   required
-                />
-                
-                <span className="text-gray-500 font-sans">- או -</span>
-                
-                <input
-                  type="file"
-                  onChange={handleFileUpload}
-                  accept="audio/*"
-                  className="w-full text-sm text-gray-500
-                    file:mr-4 file:py-2 file:px-4
-                    file:rounded-full file:border-0
-                    file:text-sm file:font-semibold
-                    file:bg-blue-50 file:text-blue-700
-                    hover:file:bg-blue-100"
                 />
 
                 {/* Summary Options Section */}

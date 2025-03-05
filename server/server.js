@@ -440,14 +440,12 @@ app.post('/api/process-audio', upload.any(), async (req, res) => {
     console.log('Files:', req.files);
     console.log('Body:', req.body);
     
-    // Check if any files were uploaded
     if (!req.files || req.files.length === 0) {
       return res.status(400).json({ error: 'No audio file uploaded' });
     }
     
-    // Use the first uploaded file
-    const uploadedFile = req.files[0];
-    console.log('File uploaded for processing:', uploadedFile);
+    const file = req.files[0];
+    console.log('File uploaded for processing:', file);
     
     // Get user email from token
     const token = req.headers.authorization?.split(' ')[1];
@@ -463,57 +461,41 @@ app.post('/api/process-audio', upload.any(), async (req, res) => {
       return res.status(401).json({ error: 'Invalid token' });
     }
     
-    // Check if user is allowed to process audio
+    // Check if user has reached their limit
     const usageCheck = await checkAndUpdateUsage(userEmail);
     if (!usageCheck.allowed) {
-      // Clean up the uploaded file
-      await cleanupFile(uploadedFile.path);
-      return res.status(403).json({ error: 'Usage limit exceeded' });
+      return res.status(403).json({ error: usageCheck.message });
     }
     
-    // Process the uploaded file
-    try {
-      console.log('Starting to process file:', uploadedFile.path);
-      
-      // Process the uploaded file using the working implementation
-      const transcript = await transcribeAudio(uploadedFile.path);
-      const summary = await summarizeText(transcript);
-      
-      // Generate PDF if requested
-      let pdfPath = null;
-      if (req.body.outputType === 'pdf') {
-        pdfPath = await generatePDF(summary);
-      }
-      
-      const result = {
-        summary,
-        pdfPath,
-        method: 'upload'
-      };
-      
-      console.log('File processed successfully');
-      
-      // Save the result to the database
-      const summaryId = await db.query(
-        `INSERT INTO summaries (user_email, summary, created_at, file_name)
-         VALUES ($1, $2, NOW(), $3)
-         RETURNING id`,
-        [userEmail, result.summary, uploadedFile.originalname]
-      );
-      
-      // Send the response
-      res.json({
-        success: true,
-        summary: result.summary,
-        pdfPath: result.pdfPath,
-        method: 'upload'
-      });
-    } catch (error) {
-      console.error('Error in processing file:', error);
-      // Clean up the uploaded file
-      await cleanupFile(uploadedFile.path);
-      throw error;
-    }
+    console.log('Starting to process file:', file.path);
+    
+    // Process the audio file
+    const transcript = await transcribeAudio(file.path);
+    const summary = await summarizeText(transcript);
+    const pdfPath = await generatePDF(summary);
+    
+    // Save to database
+    const result = await db.query(
+      `INSERT INTO summaries (user_email, summary, pdf_path, file_name, created_at)
+       VALUES ($1, $2, $3, $4, NOW())
+       RETURNING id`,
+      [userEmail, summary, pdfPath, file.originalname]
+    );
+    
+    const summaryId = result.rows[0].id;
+    
+    // Clean up the original file
+    await cleanupFile(file.path);
+    
+    console.log('File processed successfully');
+    
+    // Return the summary ID and redirect URL instead of a success message
+    res.json({ 
+      success: true, 
+      summaryId: summaryId,
+      redirectUrl: `/summary/${summaryId}`
+    });
+    
   } catch (error) {
     console.error('Error processing audio file:', error);
     res.status(500).json({ 
