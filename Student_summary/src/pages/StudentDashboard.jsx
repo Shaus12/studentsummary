@@ -375,6 +375,18 @@ const StudentDashboard = () => {
     }
   };
 
+  const viewLatestSummary = () => {
+    // Get the latest summary from localStorage
+    const savedSummary = localStorage.getItem('lastProcessedSummary');
+    if (savedSummary) {
+      const summaryData = JSON.parse(savedSummary);
+      // Navigate to the summary page
+      window.location.href = '/summary-result';
+    } else {
+      alert('No summary available');
+    }
+  };
+
   return (
     <div className="min-h-screen bg-white text-gray-800 rtl font-sans" dir="rtl">
       <Navbar />
@@ -626,6 +638,13 @@ const StudentDashboard = () => {
             ))}
           </div>
         </div>
+
+        <button 
+          onClick={viewLatestSummary}
+          className="mt-4 px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors"
+        >
+          View Latest Summary
+        </button>
       </div>
     </div>
   );
