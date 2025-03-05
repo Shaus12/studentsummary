@@ -7,25 +7,27 @@ const SummaryResult = () => {
   const navigate = useNavigate();
   const [summaryData, setSummaryData] = useState(location.state || {});
   
+  console.log("SummaryResult component mounted");
+  console.log("Location state:", location.state);
+  
   useEffect(() => {
-    // First check sessionStorage (for direct link navigation)
-    const sessionData = sessionStorage.getItem('summaryData');
-    if (sessionData) {
-      setSummaryData(JSON.parse(sessionData));
-      // Clear after use
-      sessionStorage.removeItem('summaryData');
-      return;
-    }
+    console.log("SummaryResult useEffect running");
     
-    // If no state is provided and no sessionStorage, try localStorage
-    if (!location.state) {
+    try {
+      // Check localStorage
       const savedSummary = localStorage.getItem('lastProcessedSummary');
+      console.log("Retrieved from localStorage:", savedSummary);
+      
       if (savedSummary) {
-        setSummaryData(JSON.parse(savedSummary));
-      } else {
-        // If no data is available, redirect to dashboard
+        const parsedData = JSON.parse(savedSummary);
+        console.log("Parsed data:", parsedData);
+        setSummaryData(parsedData);
+      } else if (!location.state) {
+        console.log("No data in localStorage or location.state, redirecting to dashboard");
         navigate('/dashboard');
       }
+    } catch (error) {
+      console.error("Error in SummaryResult useEffect:", error);
     }
   }, [location.state, navigate]);
   

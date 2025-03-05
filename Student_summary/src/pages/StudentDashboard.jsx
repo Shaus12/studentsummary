@@ -197,23 +197,54 @@ const StudentDashboard = () => {
         setLoading(false);
         
         if (data.success) {
-          console.log("Success! Setting processed data:", {
-            summary: data.summary,
-            pdfPath: data.pdfPath
-          });
+          console.log("Success! Received data:", data);
           
-          // Store the processed data in localStorage
-          localStorage.setItem('lastProcessedSummary', JSON.stringify({
-            summary: data.summary,
-            pdfPath: data.pdfPath
-          }));
-          
-          // Refresh summaries list
-          fetchSummaries();
-          
-          // Use window.location for navigation
-          if (confirm('הקובץ עובד בהצלחה! האם ברצונך לצפות בסיכום?')) {
-            window.location.href = '/summary-result';
+          try {
+            // Store the processed data in localStorage
+            const summaryData = {
+              summary: data.summary,
+              pdfPath: data.pdfPath
+            };
+            
+            console.log("Attempting to store in localStorage:", summaryData);
+            localStorage.setItem('lastProcessedSummary', JSON.stringify(summaryData));
+            console.log("Successfully stored in localStorage");
+            
+            // Refresh summaries list
+            fetchSummaries();
+            
+            // Show an alert with debugging info
+            const alertMessage = `
+              Processing complete!
+              Summary length: ${data.summary ? data.summary.length : 'N/A'}
+              PDF path: ${data.pdfPath || 'N/A'}
+              
+              Click OK to navigate to the summary page.
+            `;
+            
+            console.log("Showing alert:", alertMessage);
+            if (window.confirm(alertMessage)) {
+              console.log("User clicked OK, navigating to /summary-result");
+              // Try different navigation methods
+              try {
+                console.log("Method 1: Using window.location.href");
+                window.location.href = '/summary-result';
+              } catch (navError) {
+                console.error("Navigation error:", navError);
+                try {
+                  console.log("Method 2: Using window.location.assign");
+                  window.location.assign('/summary-result');
+                } catch (navError2) {
+                  console.error("Navigation error 2:", navError2);
+                  console.log("Method 3: Using navigate function");
+                  navigate('/summary-result');
+                }
+              }
+            } else {
+              console.log("User clicked Cancel, not navigating");
+            }
+          } catch (error) {
+            console.error("Error in success handling:", error);
           }
         } else {
           console.log("Error in response:", data.error);
@@ -263,23 +294,54 @@ const StudentDashboard = () => {
         setLoading(false);
         
         if (data.success) {
-          console.log("Success! Setting processed data:", {
-            summary: data.summary,
-            pdfPath: data.pdfPath
-          });
+          console.log("Success! Received data:", data);
           
-          // Store the processed data in localStorage
-          localStorage.setItem('lastProcessedSummary', JSON.stringify({
-            summary: data.summary,
-            pdfPath: data.pdfPath
-          }));
-          
-          // Refresh summaries list
-          fetchSummaries();
-          
-          // Use window.location for navigation
-          if (confirm('הקובץ עובד בהצלחה! האם ברצונך לצפות בסיכום?')) {
-            window.location.href = '/summary-result';
+          try {
+            // Store the processed data in localStorage
+            const summaryData = {
+              summary: data.summary,
+              pdfPath: data.pdfPath
+            };
+            
+            console.log("Attempting to store in localStorage:", summaryData);
+            localStorage.setItem('lastProcessedSummary', JSON.stringify(summaryData));
+            console.log("Successfully stored in localStorage");
+            
+            // Refresh summaries list
+            fetchSummaries();
+            
+            // Show an alert with debugging info
+            const alertMessage = `
+              Processing complete!
+              Summary length: ${data.summary ? data.summary.length : 'N/A'}
+              PDF path: ${data.pdfPath || 'N/A'}
+              
+              Click OK to navigate to the summary page.
+            `;
+            
+            console.log("Showing alert:", alertMessage);
+            if (window.confirm(alertMessage)) {
+              console.log("User clicked OK, navigating to /summary-result");
+              // Try different navigation methods
+              try {
+                console.log("Method 1: Using window.location.href");
+                window.location.href = '/summary-result';
+              } catch (navError) {
+                console.error("Navigation error:", navError);
+                try {
+                  console.log("Method 2: Using window.location.assign");
+                  window.location.assign('/summary-result');
+                } catch (navError2) {
+                  console.error("Navigation error 2:", navError2);
+                  console.log("Method 3: Using navigate function");
+                  navigate('/summary-result');
+                }
+              }
+            } else {
+              console.log("User clicked Cancel, not navigating");
+            }
+          } catch (error) {
+            console.error("Error in success handling:", error);
           }
         } else {
           console.log("Error in response:", data.error);
