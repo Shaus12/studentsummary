@@ -183,9 +183,14 @@ const StudentDashboard = () => {
       })
       .then(response => response.json())
       .then(data => {
-        if (data.success && data.redirectUrl) {
-          // Redirect to the summary page
-          navigate(data.redirectUrl);
+        if (data.success) {
+          // Navigate to summary result with the data
+          navigate('/summary-result', { 
+            state: { 
+              summary: data.summary,
+              pdfPath: data.pdfPath
+            }
+          });
         } else {
           // Fallback - refresh summaries list
           fetchSummaries();
@@ -221,9 +226,14 @@ const StudentDashboard = () => {
       })
       .then(response => response.json())
       .then(data => {
-        if (data.success && data.redirectUrl) {
-          // Redirect to the summary page
-          navigate(data.redirectUrl);
+        if (data.success) {
+          // Navigate to summary result with the data
+          navigate('/summary-result', { 
+            state: { 
+              summary: data.summary,
+              pdfPath: data.pdfPath
+            }
+          });
         } else {
           // Fallback - refresh summaries list
           fetchSummaries();

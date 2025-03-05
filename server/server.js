@@ -489,11 +489,11 @@ app.post('/api/process-audio', upload.any(), async (req, res) => {
     
     console.log('File processed successfully');
     
-    // Return the summary ID and redirect URL instead of a success message
+    // Return the summary and pdfPath directly instead of redirecting
     res.json({ 
-      success: true, 
-      summaryId: summaryId,
-      redirectUrl: `/summary/${summaryId}`
+      success: true,
+      summary: summary,
+      pdfPath: pdfPath ? `/files/${path.basename(pdfPath)}` : null
     });
     
   } catch (error) {
