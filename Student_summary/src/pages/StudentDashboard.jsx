@@ -174,17 +174,30 @@ const StudentDashboard = () => {
       setLoading(true);
       
       const token = localStorage.getItem('token');
-      fetch('http://207.154.192.212:5001/api/process-audio', {  // Use the actual server URL
+      console.log("Sending file to server...");
+      
+      // Use the relative URL path that will be handled by the service worker
+      fetch('/api/process-audio', {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${token}`
         },
         body: formData
       })
-      .then(response => response.json())
+      .then(response => {
+        console.log("Received response status:", response.status);
+        return response.json();
+      })
       .then(data => {
-        console.log("Received response:", data);  // Debug log
+        console.log("Received response data:", data);
+        setLoading(false);
+        
         if (data.success) {
+          console.log("Success! Navigating to summary result with data:", {
+            summary: data.summary,
+            pdfPath: data.pdfPath
+          });
+          
           // Navigate to summary result with the data
           navigate('/summary-result', { 
             state: { 
@@ -193,10 +206,10 @@ const StudentDashboard = () => {
             }
           });
         } else {
+          console.log("Error in response:", data.error);
           // Fallback - refresh summaries list
           fetchSummaries();
           setFile(null);
-          setLoading(false);
           alert(data.error || 'Error processing file');
         }
       })
@@ -220,17 +233,30 @@ const StudentDashboard = () => {
       setLoading(true);
       
       const token = localStorage.getItem('token');
-      fetch('http://207.154.192.212:5001/api/process-audio', {  // Use the actual server URL
+      console.log("Sending file to server...");
+      
+      // Use the relative URL path that will be handled by the service worker
+      fetch('/api/process-audio', {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${token}`
         },
         body: formData
       })
-      .then(response => response.json())
+      .then(response => {
+        console.log("Received response status:", response.status);
+        return response.json();
+      })
       .then(data => {
-        console.log("Received response:", data);  // Debug log
+        console.log("Received response data:", data);
+        setLoading(false);
+        
         if (data.success) {
+          console.log("Success! Navigating to summary result with data:", {
+            summary: data.summary,
+            pdfPath: data.pdfPath
+          });
+          
           // Navigate to summary result with the data
           navigate('/summary-result', { 
             state: { 
@@ -239,10 +265,10 @@ const StudentDashboard = () => {
             }
           });
         } else {
+          console.log("Error in response:", data.error);
           // Fallback - refresh summaries list
           fetchSummaries();
           setFile(null);
-          setLoading(false);
           alert(data.error || 'Error processing file');
         }
       })
