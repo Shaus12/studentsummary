@@ -8,7 +8,16 @@ const SummaryResult = () => {
   const [summaryData, setSummaryData] = useState(location.state || {});
   
   useEffect(() => {
-    // If no state is provided, try to get it from localStorage
+    // First check sessionStorage (for direct link navigation)
+    const sessionData = sessionStorage.getItem('summaryData');
+    if (sessionData) {
+      setSummaryData(JSON.parse(sessionData));
+      // Clear after use
+      sessionStorage.removeItem('summaryData');
+      return;
+    }
+    
+    // If no state is provided and no sessionStorage, try localStorage
     if (!location.state) {
       const savedSummary = localStorage.getItem('lastProcessedSummary');
       if (savedSummary) {

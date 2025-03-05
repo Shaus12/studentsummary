@@ -25,6 +25,7 @@ const StudentDashboard = () => {
   const [isUsageLimitReached, setIsUsageLimitReached] = useState(false);
   const [processedSummary, setProcessedSummary] = useState(null);
   const [processedPdfPath, setProcessedPdfPath] = useState(null);
+  const [processingComplete, setProcessingComplete] = useState(false);
 
   useEffect(() => {
     const token = localStorage.getItem('token');
@@ -174,8 +175,7 @@ const StudentDashboard = () => {
       formData.append('audioFile', droppedFile);
       
       setLoading(true);
-      setProcessedSummary(null);
-      setProcessedPdfPath(null);
+      setProcessingComplete(false);
       
       const token = localStorage.getItem('token');
       console.log("Sending file to server...");
@@ -203,21 +203,21 @@ const StudentDashboard = () => {
           });
           
           // Store the processed data
-          const summaryData = {
-            summary: data.summary,
-            pdfPath: data.pdfPath
-          };
+          setProcessedSummary(data.summary);
+          setProcessedPdfPath(data.pdfPath);
+          setProcessingComplete(true);
           
           // Store in localStorage as a fallback
-          localStorage.setItem('lastProcessedSummary', JSON.stringify(summaryData));
-          
-          // Show alert and ask if user wants to view the summary
-          if (window.confirm('הקובץ עובד בהצלחה! האם ברצונך לצפות בסיכום?')) {
-            navigate('/summary-result', { state: summaryData });
-          }
+          localStorage.setItem('lastProcessedSummary', JSON.stringify({
+            summary: data.summary,
+            pdfPath: data.pdfPath
+          }));
           
           // Refresh summaries list
           fetchSummaries();
+          
+          // Show alert
+          alert('הקובץ עובד בהצלחה! לחץ על הקישור לצפייה בסיכום.');
         } else {
           console.log("Error in response:", data.error);
           // Fallback - refresh summaries list
@@ -244,6 +244,7 @@ const StudentDashboard = () => {
       formData.append('audioFile', selectedFile);
       
       setLoading(true);
+      setProcessingComplete(false);
       
       const token = localStorage.getItem('token');
       console.log("Sending file to server...");
@@ -271,21 +272,21 @@ const StudentDashboard = () => {
           });
           
           // Store the processed data
-          const summaryData = {
-            summary: data.summary,
-            pdfPath: data.pdfPath
-          };
+          setProcessedSummary(data.summary);
+          setProcessedPdfPath(data.pdfPath);
+          setProcessingComplete(true);
           
           // Store in localStorage as a fallback
-          localStorage.setItem('lastProcessedSummary', JSON.stringify(summaryData));
-          
-          // Show alert and ask if user wants to view the summary
-          if (window.confirm('הקובץ עובד בהצלחה! האם ברצונך לצפות בסיכום?')) {
-            navigate('/summary-result', { state: summaryData });
-          }
+          localStorage.setItem('lastProcessedSummary', JSON.stringify({
+            summary: data.summary,
+            pdfPath: data.pdfPath
+          }));
           
           // Refresh summaries list
           fetchSummaries();
+          
+          // Show alert
+          alert('הקובץ עובד בהצלחה! לחץ על הקישור לצפייה בסיכום.');
         } else {
           console.log("Error in response:", data.error);
           // Fallback - refresh summaries list
@@ -568,6 +569,28 @@ const StudentDashboard = () => {
                   <span>YouTube</span>
                 </div>
               </div>
+
+              {/* Add this after your form */}
+              {processingComplete && (
+                <div className="mt-4 text-center">
+                  <div className="text-green-600 mb-2">הקובץ עובד בהצלחה!</div>
+                  <a 
+                    href="/summary-result" 
+                    className="px-6 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors inline-block w-full font-sans"
+                    onClick={(e) => {
+                      e.preventDefault();
+                      // Store the data in sessionStorage for immediate access
+                      sessionStorage.setItem('summaryData', JSON.stringify({
+                        summary: processedSummary,
+                        pdfPath: processedPdfPath
+                      }));
+                      window.location.href = '/summary-result';
+                    }}
+                  >
+                    צפה בסיכום
+                  </a>
+                </div>
+              )}
             </div>
           </CardContent>
         </Card>
