@@ -110,28 +110,26 @@ export async function transcribeAudio(filePath) {
     // Configure Deepgram options for Whisper with Hebrew
     const options = {
       smart_format: true,
-      model: "whisper",
+      model: "whisper-large",
       language: 'he'
     };
     
     console.log(`Sending request to Deepgram with options:`, options);
     
     // Send to Deepgram for transcription - using the original file directly
-    const response = await deepgram.listen.prerecorded.transcribeFile(
-      { buffer: audioFile, mimetype: 'audio/mpeg' },
+    const { result, error } = await deepgram.listen.prerecorded.transcribeFile(
+      audioFile,
       options
     );
     
-    console.log(`Deepgram response:`, JSON.stringify(response).substring(0, 200) + '...');
-    
-    // Check if response is valid
-    if (!response || !response.results) {
-      console.error('Invalid Deepgram response:', response);
-      return "לא ניתן היה לתמלל את הקובץ. אנא ודא שהקובץ תקין ונסה שוב.";
+    // Check for errors
+    if (error) {
+      console.error('Deepgram error:', error);
+      return "אירעה שגיאה בתמלול הקובץ. אנא נסה שוב מאוחר יותר.";
     }
     
     // Extract transcript
-    const transcript = response.results.channels[0].alternatives[0].transcript;
+    const transcript = result.results.channels[0].alternatives[0].transcript;
     console.log(`Transcription complete, length: ${transcript.length}`);
     
     return transcript;
