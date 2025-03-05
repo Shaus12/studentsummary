@@ -37,13 +37,14 @@ const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
  */
 async function convertAudioFile(filePath) {
   try {
-    // Create output path with mp3 extension (Whisper was trained on mp3 files)
+    // Create output path with mp3 extension
     const outputPath = filePath.replace(/\.[^/.]+$/, '') + '_converted.mp3';
     
     console.log(`Converting audio file from ${filePath} to ${outputPath}`);
     
-    // Use ffmpeg to normalize and convert the audio
-    await execAsync(`ffmpeg -y -i "${filePath}" -af "loudnorm=I=-16:LRA=11:TP=-1.5" -ar 16000 -ac 1 "${outputPath}"`);
+    // Use a very simple conversion that just copies the audio stream
+    // This avoids any potential corruption from complex processing
+    await execAsync(`ffmpeg -y -i "${filePath}" -c:a libmp3lame -q:a 4 "${outputPath}"`);
     
     console.log(`Converted audio file to: ${outputPath}`);
     
