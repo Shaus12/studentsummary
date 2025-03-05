@@ -23,6 +23,8 @@ const StudentDashboard = () => {
   });
   const [outputType, setOutputType] = useState('summary');
   const [isUsageLimitReached, setIsUsageLimitReached] = useState(false);
+  const [processedSummary, setProcessedSummary] = useState(null);
+  const [processedPdfPath, setProcessedPdfPath] = useState(null);
 
   useEffect(() => {
     const token = localStorage.getItem('token');
@@ -172,6 +174,8 @@ const StudentDashboard = () => {
       formData.append('audioFile', droppedFile);
       
       setLoading(true);
+      setProcessedSummary(null);
+      setProcessedPdfPath(null);
       
       const token = localStorage.getItem('token');
       console.log("Sending file to server...");
@@ -193,18 +197,27 @@ const StudentDashboard = () => {
         setLoading(false);
         
         if (data.success) {
-          console.log("Success! Navigating to summary result with data:", {
+          console.log("Success! Setting processed data:", {
             summary: data.summary,
             pdfPath: data.pdfPath
           });
           
-          // Navigate to summary result with the data
-          navigate('/summary-result', { 
-            state: { 
-              summary: data.summary,
-              pdfPath: data.pdfPath
-            }
-          });
+          // Store the processed data
+          const summaryData = {
+            summary: data.summary,
+            pdfPath: data.pdfPath
+          };
+          
+          // Store in localStorage as a fallback
+          localStorage.setItem('lastProcessedSummary', JSON.stringify(summaryData));
+          
+          // Show alert and ask if user wants to view the summary
+          if (window.confirm('הקובץ עובד בהצלחה! האם ברצונך לצפות בסיכום?')) {
+            navigate('/summary-result', { state: summaryData });
+          }
+          
+          // Refresh summaries list
+          fetchSummaries();
         } else {
           console.log("Error in response:", data.error);
           // Fallback - refresh summaries list
@@ -252,18 +265,27 @@ const StudentDashboard = () => {
         setLoading(false);
         
         if (data.success) {
-          console.log("Success! Navigating to summary result with data:", {
+          console.log("Success! Setting processed data:", {
             summary: data.summary,
             pdfPath: data.pdfPath
           });
           
-          // Navigate to summary result with the data
-          navigate('/summary-result', { 
-            state: { 
-              summary: data.summary,
-              pdfPath: data.pdfPath
-            }
-          });
+          // Store the processed data
+          const summaryData = {
+            summary: data.summary,
+            pdfPath: data.pdfPath
+          };
+          
+          // Store in localStorage as a fallback
+          localStorage.setItem('lastProcessedSummary', JSON.stringify(summaryData));
+          
+          // Show alert and ask if user wants to view the summary
+          if (window.confirm('הקובץ עובד בהצלחה! האם ברצונך לצפות בסיכום?')) {
+            navigate('/summary-result', { state: summaryData });
+          }
+          
+          // Refresh summaries list
+          fetchSummaries();
         } else {
           console.log("Error in response:", data.error);
           // Fallback - refresh summaries list

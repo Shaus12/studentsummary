@@ -1,13 +1,28 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { Card } from '../components/ui/card';
 
 const SummaryResult = () => {
   const location = useLocation();
   const navigate = useNavigate();
-  const { summary, pdfPath } = location.state || {};
+  const [summaryData, setSummaryData] = useState(location.state || {});
+  
+  useEffect(() => {
+    // If no state is provided, try to get it from localStorage
+    if (!location.state) {
+      const savedSummary = localStorage.getItem('lastProcessedSummary');
+      if (savedSummary) {
+        setSummaryData(JSON.parse(savedSummary));
+      } else {
+        // If no data is available, redirect to dashboard
+        navigate('/dashboard');
+      }
+    }
+  }, [location.state, navigate]);
+  
+  const { summary, pdfPath } = summaryData;
 
-  console.log('Summary state:', location.state);
+  console.log('Summary state:', summaryData);
   console.log('PDF path:', pdfPath);
 
   const handleDownloadPDF = () => {
