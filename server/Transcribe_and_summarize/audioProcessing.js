@@ -37,14 +37,13 @@ const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
  */
 async function convertAudioFile(filePath) {
   try {
-    // Create output path with mp3 extension
+    // Create output path with mp3 extension (Whisper was trained on mp3 files)
     const outputPath = filePath.replace(/\.[^/.]+$/, '') + '_converted.mp3';
     
     console.log(`Converting audio file from ${filePath} to ${outputPath}`);
     
-    // Use a very simple conversion that just copies the audio stream
-    // This avoids any potential corruption from complex processing
-    await execAsync(`ffmpeg -y -i "${filePath}" -c:a libmp3lame -q:a 4 "${outputPath}"`);
+    // Use ffmpeg to normalize and convert the audio
+    await execAsync(`ffmpeg -y -i "${filePath}" -af "loudnorm=I=-16:LRA=11:TP=-1.5" -ar 16000 -ac 1 "${outputPath}"`);
     
     console.log(`Converted audio file to: ${outputPath}`);
     
@@ -76,6 +75,25 @@ async function cleanupFile(filePath) {
 }
 
 /**
+ * Upload file to a temporary storage service
+ * @param {string} filePath - Path to the file
+ * @returns {Promise<string>} - URL to the uploaded file
+ */
+async function uploadFileToTemporaryStorage(filePath) {
+  try {
+    // For this example, we'll use a mock implementation
+    // In a real application, you would upload to a service like AWS S3, Google Cloud Storage, etc.
+    console.log(`Would upload ${filePath} to temporary storage`);
+    
+    // Return a mock URL
+    return `https://example.com/temp/${path.basename(filePath)}`;
+  } catch (error) {
+    console.error("Error uploading file:", error);
+    throw error;
+  }
+}
+
+/**
  * Transcribe audio file using Deepgram
  * @param {string} filePath - Path to audio file
  * @returns {Promise<string>} - Transcription text
@@ -90,6 +108,10 @@ export async function transcribeAudio(filePath) {
     // Convert the audio file to a format Deepgram can handle
     convertedFilePath = await convertAudioFile(filePath);
     
+    // Read the converted audio file
+    const audioFile = fs.readFileSync(convertedFilePath);
+    console.log(`Converted file size: ${audioFile.length} bytes`);
+    
     // Configure Deepgram options for Whisper with Hebrew
     const options = {
       smart_format: true,
@@ -102,11 +124,11 @@ export async function transcribeAudio(filePath) {
     
     console.log(`Sending request to Deepgram with options:`, options);
     
-    // Use a URL source instead of a buffer
-    const source = { url: `file://${convertedFilePath}` };
-    
-    // Send to Deepgram for transcription using URL
-    const response = await deepgram.listen.prerecorded.transcribeUrl(source, options);
+    // Send to Deepgram for transcription
+    const response = await deepgram.listen.prerecorded.transcribeFile(
+      { buffer: audioFile, mimetype: 'audio/mp3' },
+      options
+    );
     
     console.log(`Deepgram response:`, JSON.stringify(response).substring(0, 200) + '...');
     
