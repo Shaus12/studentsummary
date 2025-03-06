@@ -199,23 +199,13 @@ const StudentDashboard = () => {
         if (data.success) {
           console.log("Success! Received data:", data);
           
-          // Create a summary object similar to what's used for previous summaries
-          const newSummary = {
-            id: Date.now(), // Generate a temporary ID
-            summary: data.summary,
-            pdfPath: data.pdfPath,
-            title: 'New Summary',
-            created_at: new Date().toISOString()
-          };
-          
-          // Store it in state or localStorage if needed
-          localStorage.setItem('lastProcessedSummary', JSON.stringify(newSummary));
-          
-          // Refresh summaries list
-          fetchSummaries();
-          
-          // Use the same function that works for previous summaries
-          viewSummary(newSummary);
+          // Navigate to the summary page using the exact same approach as for existing summaries
+          navigate('/summary-result', { 
+            state: { 
+              summary: data.summary,
+              pdfPath: data.pdfPath
+            }
+          });
         } else {
           console.log("Error in response:", data.error);
           // Fallback - refresh summaries list
@@ -266,23 +256,13 @@ const StudentDashboard = () => {
         if (data.success) {
           console.log("Success! Received data:", data);
           
-          // Create a summary object similar to what's used for previous summaries
-          const newSummary = {
-            id: Date.now(), // Generate a temporary ID
-            summary: data.summary,
-            pdfPath: data.pdfPath,
-            title: 'New Summary',
-            created_at: new Date().toISOString()
-          };
-          
-          // Store it in state or localStorage if needed
-          localStorage.setItem('lastProcessedSummary', JSON.stringify(newSummary));
-          
-          // Refresh summaries list
-          fetchSummaries();
-          
-          // Use the same function that works for previous summaries
-          viewSummary(newSummary);
+          // Navigate to the summary page using the exact same approach as for existing summaries
+          navigate('/summary-result', { 
+            state: { 
+              summary: data.summary,
+              pdfPath: data.pdfPath
+            }
+          });
         } else {
           console.log("Error in response:", data.error);
           // Fallback - refresh summaries list
