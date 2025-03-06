@@ -199,53 +199,23 @@ const StudentDashboard = () => {
         if (data.success) {
           console.log("Success! Received data:", data);
           
-          try {
-            // Store the processed data in localStorage
-            const summaryData = {
-              summary: data.summary,
-              pdfPath: data.pdfPath
-            };
-            
-            console.log("Attempting to store in localStorage:", summaryData);
-            localStorage.setItem('lastProcessedSummary', JSON.stringify(summaryData));
-            console.log("Successfully stored in localStorage");
-            
-            // Refresh summaries list
-            fetchSummaries();
-            
-            // Show an alert with debugging info
-            const alertMessage = `
-              Processing complete!
-              Summary length: ${data.summary ? data.summary.length : 'N/A'}
-              PDF path: ${data.pdfPath || 'N/A'}
-              
-              Click OK to navigate to the summary page.
-            `;
-            
-            console.log("Showing alert:", alertMessage);
-            if (window.confirm(alertMessage)) {
-              console.log("User clicked OK, navigating to /summary-result");
-              // Try different navigation methods
-              try {
-                console.log("Method 1: Using window.location.href");
-                window.location.href = '/summary-result';
-              } catch (navError) {
-                console.error("Navigation error:", navError);
-                try {
-                  console.log("Method 2: Using window.location.assign");
-                  window.location.assign('/summary-result');
-                } catch (navError2) {
-                  console.error("Navigation error 2:", navError2);
-                  console.log("Method 3: Using navigate function");
-                  navigate('/summary-result');
-                }
-              }
-            } else {
-              console.log("User clicked Cancel, not navigating");
-            }
-          } catch (error) {
-            console.error("Error in success handling:", error);
-          }
+          // Create a summary object similar to what's used for previous summaries
+          const newSummary = {
+            id: Date.now(), // Generate a temporary ID
+            summary: data.summary,
+            pdfPath: data.pdfPath,
+            title: 'New Summary',
+            created_at: new Date().toISOString()
+          };
+          
+          // Store it in state or localStorage if needed
+          localStorage.setItem('lastProcessedSummary', JSON.stringify(newSummary));
+          
+          // Refresh summaries list
+          fetchSummaries();
+          
+          // Use the same function that works for previous summaries
+          viewSummary(newSummary);
         } else {
           console.log("Error in response:", data.error);
           // Fallback - refresh summaries list
@@ -296,53 +266,23 @@ const StudentDashboard = () => {
         if (data.success) {
           console.log("Success! Received data:", data);
           
-          try {
-            // Store the processed data in localStorage
-            const summaryData = {
-              summary: data.summary,
-              pdfPath: data.pdfPath
-            };
-            
-            console.log("Attempting to store in localStorage:", summaryData);
-            localStorage.setItem('lastProcessedSummary', JSON.stringify(summaryData));
-            console.log("Successfully stored in localStorage");
-            
-            // Refresh summaries list
-            fetchSummaries();
-            
-            // Show an alert with debugging info
-            const alertMessage = `
-              Processing complete!
-              Summary length: ${data.summary ? data.summary.length : 'N/A'}
-              PDF path: ${data.pdfPath || 'N/A'}
-              
-              Click OK to navigate to the summary page.
-            `;
-            
-            console.log("Showing alert:", alertMessage);
-            if (window.confirm(alertMessage)) {
-              console.log("User clicked OK, navigating to /summary-result");
-              // Try different navigation methods
-              try {
-                console.log("Method 1: Using window.location.href");
-                window.location.href = '/summary-result';
-              } catch (navError) {
-                console.error("Navigation error:", navError);
-                try {
-                  console.log("Method 2: Using window.location.assign");
-                  window.location.assign('/summary-result');
-                } catch (navError2) {
-                  console.error("Navigation error 2:", navError2);
-                  console.log("Method 3: Using navigate function");
-                  navigate('/summary-result');
-                }
-              }
-            } else {
-              console.log("User clicked Cancel, not navigating");
-            }
-          } catch (error) {
-            console.error("Error in success handling:", error);
-          }
+          // Create a summary object similar to what's used for previous summaries
+          const newSummary = {
+            id: Date.now(), // Generate a temporary ID
+            summary: data.summary,
+            pdfPath: data.pdfPath,
+            title: 'New Summary',
+            created_at: new Date().toISOString()
+          };
+          
+          // Store it in state or localStorage if needed
+          localStorage.setItem('lastProcessedSummary', JSON.stringify(newSummary));
+          
+          // Refresh summaries list
+          fetchSummaries();
+          
+          // Use the same function that works for previous summaries
+          viewSummary(newSummary);
         } else {
           console.log("Error in response:", data.error);
           // Fallback - refresh summaries list
@@ -441,6 +381,16 @@ const StudentDashboard = () => {
     } else {
       alert('No summary available');
     }
+  };
+
+  const viewSummary = (summary) => {
+    // Navigate to the summary page with the summary data
+    navigate('/summary-result', { 
+      state: { 
+        summary: summary.summary,
+        pdfPath: summary.pdfPath || summary.pdf_path // Handle both naming conventions
+      }
+    });
   };
 
   return (
