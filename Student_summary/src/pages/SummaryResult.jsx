@@ -37,28 +37,6 @@ const SummaryResult = () => {
   console.log('Summary state:', summaryData);
   console.log('PDF path:', pdfPath);
 
-  const handleDownloadPDF = () => {
-    console.log("handleDownloadPDF called");
-    console.log("pdfPath:", pdfPath);
-    
-    if (pdfPath) {
-      const pathParts = pdfPath.split('/');
-      const filename = pathParts[pathParts.length - 1];
-      const downloadUrl = `/api/download-pdf?filename=${encodeURIComponent(filename)}`;
-      console.log('Attempting to download PDF from:', downloadUrl);
-      
-      const link = document.createElement('a');
-      link.href = downloadUrl;
-      link.download = 'summary.pdf';
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-    } else {
-      console.error('No PDF path available');
-      alert('No PDF path available');
-    }
-  };
-
   const handleBack = () => {
     navigate('/dashboard');
   };
@@ -79,9 +57,25 @@ const SummaryResult = () => {
               <button
                 onClick={() => {
                   console.log("Button clicked");
-                  handleDownloadPDF();
+                  if (pdfPath) {
+                    const pathParts = pdfPath.split('/');
+                    const filename = pathParts[pathParts.length - 1];
+                    const downloadUrl = `/api/download-pdf?filename=${encodeURIComponent(filename)}`;
+                    console.log('Attempting to download PDF from:', downloadUrl);
+                    
+                    // Create a direct download link
+                    const link = document.createElement('a');
+                    link.href = downloadUrl;
+                    link.download = 'summary.pdf';
+                    document.body.appendChild(link);
+                    link.click();
+                    document.body.removeChild(link);
+                  } else {
+                    console.error('No PDF path available');
+                    alert('No PDF path available');
+                  }
                 }}
-                style={{ display: 'block', margin: '20px', padding: '10px', backgroundColor: 'blue', color: 'white' }}
+                style={{ display: 'block', padding: '10px 20px', backgroundColor: '#2563eb', color: 'white', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold' }}
               >
                 הורד PDF
               </button>
