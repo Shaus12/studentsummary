@@ -42,8 +42,12 @@ const SummaryResult = () => {
     console.log("pdfPath:", pdfPath);
     
     if (pdfPath) {
+      // Extract the filename from the path
+      const pathParts = pdfPath.split('/');
+      const filename = pathParts[pathParts.length - 1];
+      
       // Create a server-side endpoint to handle the download
-      const downloadUrl = `/api/download-pdf?path=${encodeURIComponent(pdfPath)}`;
+      const downloadUrl = `/api/download-pdf?filename=${encodeURIComponent(filename)}`;
       console.log('Attempting to download PDF from:', downloadUrl);
       
       // Create a direct download link
@@ -79,7 +83,6 @@ const SummaryResult = () => {
               <button
                 onClick={handleDownloadPDF}
                 className="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 transition-colors flex items-center gap-2"
-                disabled={!pdfPath}
               >
                 <span>הורד PDF</span>
                 <span>📄</span>

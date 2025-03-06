@@ -701,14 +701,11 @@ app.get('/api/summary/:id', async (req, res) => {
   }
 });
 
-// Add a new endpoint to handle PDF downloads
+// Update the download-pdf endpoint
 app.get('/api/download-pdf', async (req, res) => {
   try {
-    const pdfPath = req.query.path;
-    console.log('Download PDF request for path:', pdfPath);
-    
-    // Extract the filename from the path
-    const filename = path.basename(pdfPath);
+    const filename = req.query.filename;
+    console.log('Download PDF request for filename:', filename);
     
     // Construct the full path to the PDF file
     const fullPath = path.join(__dirname, 'temp', filename);
