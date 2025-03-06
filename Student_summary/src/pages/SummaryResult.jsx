@@ -42,28 +42,35 @@ const SummaryResult = () => {
     console.log("pdfPath:", pdfPath);
     
     if (pdfPath) {
-      // Use the relative path that will be handled by the service worker
-      const fullPdfUrl = pdfPath;
+      // Ensure we have a valid path
+      let fullPdfUrl = pdfPath;
+      
+      // If it's a relative path, make it absolute
+      if (pdfPath.startsWith('/')) {
+        fullPdfUrl = pdfPath; // Keep it relative for the service worker
+      }
+      
       console.log('Attempting to open PDF at:', fullPdfUrl);
       
       // Try a different approach
       try {
-        // First try window.open
-        window.open(fullPdfUrl, '_blank');
-        
-        // Also create a direct link as a fallback
+        // Create a direct link
         const link = document.createElement('a');
         link.href = fullPdfUrl;
         link.target = '_blank';
-        link.download = 'summary.pdf';
+        link.rel = 'noopener noreferrer';
         document.body.appendChild(link);
         link.click();
         document.body.removeChild(link);
       } catch (error) {
         console.error('Error opening PDF:', error);
+        
+        // Fallback to window.open
+        window.open(fullPdfUrl, '_blank');
       }
     } else {
       console.error('No PDF path available');
+      alert('No PDF path available');
     }
   };
 

@@ -40,7 +40,7 @@ const PORT = process.env.PORT || 5001;
 
 app.use(express.json());
 app.use(cors({
-  origin: ['http://207.154.192.212', 'http://207.154.192.212:5001'],
+  origin: '*', // Allow all origins
   credentials: true
 }));
 
@@ -497,11 +497,10 @@ app.post('/api/process-audio', upload.any(), async (req, res) => {
     console.log('File processed successfully');
     
     // Return the summary and pdfPath directly
-    const fullPdfUrl = `http://localhost:5001${pdfPath}`;
     res.json({ 
       success: true,
       summary: summary,
-      pdfPath: fullPdfUrl
+      pdfPath: relativePdfPath
     });
     
   } catch (error) {
