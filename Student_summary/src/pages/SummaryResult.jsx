@@ -9,6 +9,7 @@ const SummaryResult = () => {
   
   console.log("SummaryResult component mounted");
   console.log("Location state:", location.state);
+  console.log("PDF path from state:", location.state?.pdfPath);
   
   useEffect(() => {
     console.log("SummaryResult useEffect running");
@@ -37,11 +38,30 @@ const SummaryResult = () => {
   console.log('PDF path:', pdfPath);
 
   const handleDownloadPDF = () => {
+    console.log("handleDownloadPDF called");
+    console.log("pdfPath:", pdfPath);
+    
     if (pdfPath) {
       // Use the relative path that will be handled by the service worker
       const fullPdfUrl = pdfPath;
       console.log('Attempting to open PDF at:', fullPdfUrl);
-      window.open(fullPdfUrl, '_blank');
+      
+      // Try a different approach
+      try {
+        // First try window.open
+        window.open(fullPdfUrl, '_blank');
+        
+        // Also create a direct link as a fallback
+        const link = document.createElement('a');
+        link.href = fullPdfUrl;
+        link.target = '_blank';
+        link.download = 'summary.pdf';
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+      } catch (error) {
+        console.error('Error opening PDF:', error);
+      }
     } else {
       console.error('No PDF path available');
     }
