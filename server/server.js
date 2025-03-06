@@ -707,21 +707,17 @@ app.get('/api/download-pdf', async (req, res) => {
     const filename = req.query.filename;
     console.log('Download PDF request for filename:', filename);
     
-    // Construct the full path to the PDF file
     const fullPath = path.join(__dirname, 'temp', filename);
     console.log('Full path to PDF file:', fullPath);
     
-    // Check if the file exists
     if (!existsSync(fullPath)) {
       console.error('PDF file not found:', fullPath);
       return res.status(404).send('PDF file not found');
     }
     
-    // Set the appropriate headers
     res.setHeader('Content-Type', 'application/pdf');
     res.setHeader('Content-Disposition', `attachment; filename=${filename}`);
     
-    // Send the file
     res.sendFile(fullPath);
   } catch (error) {
     console.error('Error downloading PDF:', error);

@@ -42,18 +42,14 @@ const SummaryResult = () => {
     console.log("pdfPath:", pdfPath);
     
     if (pdfPath) {
-      // Extract the filename from the path
       const pathParts = pdfPath.split('/');
       const filename = pathParts[pathParts.length - 1];
-      
-      // Create a server-side endpoint to handle the download
       const downloadUrl = `/api/download-pdf?filename=${encodeURIComponent(filename)}`;
       console.log('Attempting to download PDF from:', downloadUrl);
       
-      // Create a direct download link
       const link = document.createElement('a');
       link.href = downloadUrl;
-      link.download = 'summary.pdf'; // Suggest a filename
+      link.download = 'summary.pdf';
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
@@ -81,7 +77,10 @@ const SummaryResult = () => {
                 חזור
               </button>
               <button
-                onClick={handleDownloadPDF}
+                onClick={() => {
+                  console.log("Button clicked");
+                  handleDownloadPDF();
+                }}
                 className="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 transition-colors flex items-center gap-2"
               >
                 <span>הורד PDF</span>
