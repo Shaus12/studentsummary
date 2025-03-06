@@ -42,32 +42,17 @@ const SummaryResult = () => {
     console.log("pdfPath:", pdfPath);
     
     if (pdfPath) {
-      // Ensure we have a valid path
-      let fullPdfUrl = pdfPath;
+      // Create a server-side endpoint to handle the download
+      const downloadUrl = `/api/download-pdf?path=${encodeURIComponent(pdfPath)}`;
+      console.log('Attempting to download PDF from:', downloadUrl);
       
-      // If it's a relative path, make it absolute
-      if (pdfPath.startsWith('/')) {
-        fullPdfUrl = pdfPath; // Keep it relative for the service worker
-      }
-      
-      console.log('Attempting to open PDF at:', fullPdfUrl);
-      
-      // Try a different approach
-      try {
-        // Create a direct link
-        const link = document.createElement('a');
-        link.href = fullPdfUrl;
-        link.target = '_blank';
-        link.rel = 'noopener noreferrer';
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
-      } catch (error) {
-        console.error('Error opening PDF:', error);
-        
-        // Fallback to window.open
-        window.open(fullPdfUrl, '_blank');
-      }
+      // Create a direct download link
+      const link = document.createElement('a');
+      link.href = downloadUrl;
+      link.download = 'summary.pdf'; // Suggest a filename
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
     } else {
       console.error('No PDF path available');
       alert('No PDF path available');
