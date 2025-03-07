@@ -481,12 +481,12 @@ app.post('/api/process-audio', upload.any(), async (req, res) => {
     const relativePdfPath = pdfPath ? `/files/${path.basename(pdfPath)}` : null;
     console.log('Relative PDF path for client:', relativePdfPath);
     
-    // Save to database
+    // Save to database using the relative path
     const result = await db.query(
       `INSERT INTO summaries (user_email, summary, pdf_path, file_name, created_at)
        VALUES ($1, $2, $3, $4, NOW())
        RETURNING id`,
-      [userEmail, summary, pdfPath, file.originalname]
+      [userEmail, summary, relativePdfPath, file.originalname]
     );
     
     const summaryId = result.rows[0].id;
@@ -500,7 +500,8 @@ app.post('/api/process-audio', upload.any(), async (req, res) => {
     res.json({ 
       success: true,
       summary: summary,
-      pdfPath: relativePdfPath
+      pdfPath: relativePdfPath,
+      id: summaryId
     });
     
   } catch (error) {
