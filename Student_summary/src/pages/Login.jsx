@@ -205,18 +205,7 @@ function Login() {
             <button
               type="submit"
               disabled={isLoading || success}
-              style={{
-                backgroundColor: isLoading || success ? '#93c5fd' : '#2563eb',
-                color: 'white',
-                padding: '16px',
-                borderRadius: '8px',
-                border: 'none',
-                cursor: isLoading || success ? 'not-allowed' : 'pointer',
-                marginTop: '20px',
-                fontSize: '16px',
-                fontWeight: 'bold',
-                transition: 'background-color 0.2s'
-              }}
+              className="login-button"
             >
               {isLoading ? 'מתחבר...' : 'התחבר'}
             </button>

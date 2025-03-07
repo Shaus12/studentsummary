@@ -114,7 +114,12 @@ const SummaryResult = () => {
               <button
                 ref={buttonRef}
                 onClick={handleDownloadPDF}
-                className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors"
+                className="!w-auto !bg-none !p-0 px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors"
+                style={{
+                  background: 'rgb(37 99 235)', // This is the blue-600 color
+                  width: 'auto',
+                  padding: '0.5rem 1rem'
+                }}
               >
                 הורד PDF
               </button>

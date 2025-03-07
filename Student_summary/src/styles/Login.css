@@ -62,20 +62,20 @@ input:focus {
   box-shadow: 0 0 8px rgba(52, 152, 219, 0.3);
 }
 
-button {
+.login-button {
   width: 100%;
   padding: 0.85rem;
   background: linear-gradient(135deg, #3498db, #2ecc71);
   color: white;
   border: none;
   border-radius: 8px;
-  font-size: 1.2rem; /* Slightly larger font size for buttons */
+  font-size: 1.2rem;
   font-weight: bold;
   cursor: pointer;
   transition: all 0.3s ease-in-out;
 }
 
-button:hover {
+.login-button:hover {
   background: linear-gradient(135deg, #2ecc71, #3498db);
   transform: translateY(-2px);
   box-shadow: 0 8px 16px rgba(0, 0, 0, 0.1);
