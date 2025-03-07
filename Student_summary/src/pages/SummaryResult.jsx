@@ -16,32 +16,50 @@ const SummaryResult = () => {
   // Add a ref to get direct access to the button
   const buttonRef = useRef(null);
 
+  // Add this new useEffect to continuously check and enable the button
   useEffect(() => {
-    console.log("Component mounted");
+    const enableButton = () => {
+      const pdfButton = Array.from(document.querySelectorAll('button')).find(btn => 
+        btn.innerText.includes('הורד PDF')
+      );
+      
+      if (pdfButton) {
+        console.log('Found PDF button, enabling it');
+        pdfButton.removeAttribute('disabled');
+        pdfButton.disabled = false;
+        pdfButton.style.cursor = 'pointer';
+        pdfButton.style.pointerEvents = 'auto';
+        pdfButton.onclick = handleDownloadPDF;
+      }
+    };
+
+    // Run immediately
+    enableButton();
     
-    // Get data from localStorage or location state
+    // Run again after a short delay
+    const timeoutId = setTimeout(enableButton, 100);
+    
+    // Also run periodically
+    const intervalId = setInterval(enableButton, 1000);
+
+    return () => {
+      clearTimeout(timeoutId);
+      clearInterval(intervalId);
+    };
+  }, []);
+
+  useEffect(() => {
     const savedSummary = localStorage.getItem('lastProcessedSummary');
-    console.log('Saved summary:', savedSummary);
-    
     if (savedSummary) {
       try {
         const parsedData = JSON.parse(savedSummary);
-        console.log('Parsed data:', parsedData);
         setSummaryData(parsedData);
       } catch (error) {
         console.error('Error parsing saved summary:', error);
       }
     } else if (location.state) {
-      console.log('Using location state:', location.state);
       setSummaryData(location.state);
       localStorage.setItem('lastProcessedSummary', JSON.stringify(location.state));
-    }
-
-    // Set up the button handler (using the code we know works)
-    if (buttonRef.current) {
-      buttonRef.current.disabled = false;
-      buttonRef.current.style.cursor = 'pointer';
-      buttonRef.current.onclick = handleDownloadPDF;
     }
   }, [location.state]);
   
@@ -57,7 +75,8 @@ const SummaryResult = () => {
     navigate('/dashboard');
   };
 
-  const handleDownloadPDF = () => {
+  const handleDownloadPDF = (e) => {
+    if (e) e.preventDefault();
     console.log('Button clicked');
     const savedSummary = localStorage.getItem('lastProcessedSummary');
     console.log('Using saved summary:', savedSummary);
@@ -98,7 +117,8 @@ const SummaryResult = () => {
                 className="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 transition-colors flex items-center gap-2"
                 style={{
                   cursor: 'pointer',
-                  pointerEvents: 'auto'
+                  pointerEvents: 'auto',
+                  opacity: 1
                 }}
               >
                 <span>הורד PDF</span>
