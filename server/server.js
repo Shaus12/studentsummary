@@ -701,10 +701,10 @@ app.get('/api/summary/:id', async (req, res) => {
   }
 });
 
-// Update the download-pdf endpoint
-app.get('/api/download-pdf', async (req, res) => {
+// Update the download-pdf endpoint to use URL parameters instead of query parameters
+app.get('/api/download-pdf/:filename', async (req, res) => {
   try {
-    const filename = req.query.filename;
+    const filename = req.params.filename;
     console.log('Download PDF request for filename:', filename);
     
     // Construct the full path to the PDF file
@@ -722,7 +722,12 @@ app.get('/api/download-pdf', async (req, res) => {
     res.setHeader('Content-Disposition', `attachment; filename=${filename}`);
     
     // Send the file
-    res.sendFile(fullPath);
+    res.sendFile(fullPath, (err) => {
+      if (err) {
+        console.error('Error sending file:', err);
+        res.status(500).send('Error downloading PDF');
+      }
+    });
   } catch (error) {
     console.error('Error downloading PDF:', error);
     res.status(500).send('Error downloading PDF');
