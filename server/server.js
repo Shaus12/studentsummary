@@ -729,6 +729,32 @@ app.get('/api/download-pdf', async (req, res) => {
   }
 });
 
+// Add this endpoint to handle PDF downloads
+app.get('/api/download-pdf/:filename', (req, res) => {
+  try {
+    const { filename } = req.params;
+    console.log('Download request for PDF:', filename);
+    
+    const filePath = path.join(__dirname, 'temp', filename);
+    console.log('Full path:', filePath);
+    
+    if (!fs.existsSync(filePath)) {
+      console.error('PDF file not found:', filePath);
+      return res.status(404).send('PDF not found');
+    }
+
+    res.download(filePath, filename, (err) => {
+      if (err) {
+        console.error('Error sending file:', err);
+        res.status(500).send('Error downloading file');
+      }
+    });
+  } catch (error) {
+    console.error('Error in download endpoint:', error);
+    res.status(500).send('Server error');
+  }
+});
+
 // Start the server
 app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
