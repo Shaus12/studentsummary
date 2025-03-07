@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { Card } from '../components/ui/card';
 
@@ -12,6 +12,9 @@ const SummaryResult = () => {
   
   const [summaryData, setSummaryData] = useState(location.state || {});
   const [isDownloading, setIsDownloading] = useState(false);
+
+  // Add a ref to get direct access to the button
+  const buttonRef = useRef(null);
 
   useEffect(() => {
     console.log("Component mounted");
@@ -31,8 +34,14 @@ const SummaryResult = () => {
     } else if (location.state) {
       console.log('Using location state:', location.state);
       setSummaryData(location.state);
-      // Save to localStorage
       localStorage.setItem('lastProcessedSummary', JSON.stringify(location.state));
+    }
+
+    // Force enable the button
+    if (buttonRef.current) {
+      buttonRef.current.disabled = false;
+      buttonRef.current.style.cursor = 'pointer';
+      buttonRef.current.style.opacity = '1';
     }
   }, [location.state]);
   
@@ -48,7 +57,8 @@ const SummaryResult = () => {
     navigate('/dashboard');
   };
 
-  const handleDownloadPDF = () => {
+  const handleDownloadPDF = (e) => {
+    e.preventDefault(); // Prevent any default behavior
     console.log('Download button clicked');
     
     // Get the latest data from localStorage
@@ -90,9 +100,14 @@ const SummaryResult = () => {
                 חזור
               </button>
               <button
+                ref={buttonRef}
                 onClick={handleDownloadPDF}
-                className="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 transition-colors flex items-center gap-2 cursor-pointer"
-                style={{ cursor: 'pointer' }}
+                className="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 transition-colors flex items-center gap-2"
+                style={{
+                  cursor: 'pointer',
+                  opacity: '1',
+                  pointerEvents: 'auto'
+                }}
               >
                 <span>הורד PDF</span>
                 <span>📄</span>
