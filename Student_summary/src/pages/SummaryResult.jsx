@@ -19,22 +19,7 @@ const SummaryResult = () => {
   useEffect(() => {
     console.log("Component mounted");
     
-    // Add the working console code directly in the component
-    setTimeout(() => {
-      const pdfButton = Array.from(document.querySelectorAll('button')).find(btn => 
-        btn.innerText.includes('הורד PDF')
-      );
-      
-      if (pdfButton) {
-        console.log('Found PDF button, enabling it');
-        pdfButton.disabled = false;
-        pdfButton.style.backgroundColor = '#2563eb';
-        pdfButton.style.cursor = 'pointer';
-        pdfButton.onclick = handleDownloadPDF;
-      }
-    }, 100);  // Small delay to ensure button is rendered
-
-    // Try to get data from localStorage first
+    // Get data from localStorage or location state
     const savedSummary = localStorage.getItem('lastProcessedSummary');
     console.log('Saved summary:', savedSummary);
     
@@ -52,11 +37,11 @@ const SummaryResult = () => {
       localStorage.setItem('lastProcessedSummary', JSON.stringify(location.state));
     }
 
-    // Force enable the button
+    // Set up the button handler (using the code we know works)
     if (buttonRef.current) {
       buttonRef.current.disabled = false;
       buttonRef.current.style.cursor = 'pointer';
-      buttonRef.current.style.opacity = '1';
+      buttonRef.current.onclick = handleDownloadPDF;
     }
   }, [location.state]);
   
@@ -72,26 +57,19 @@ const SummaryResult = () => {
     navigate('/dashboard');
   };
 
-  const handleDownloadPDF = (e) => {
-    e.preventDefault(); // Prevent any default behavior
-    console.log('Download button clicked');
-    
-    // Get the latest data from localStorage
+  const handleDownloadPDF = () => {
+    console.log('Button clicked');
     const savedSummary = localStorage.getItem('lastProcessedSummary');
-    console.log('Saved summary:', savedSummary);
+    console.log('Using saved summary:', savedSummary);
     
     if (savedSummary) {
       const parsedData = JSON.parse(savedSummary);
       const pdfPath = parsedData.pdfPath;
-      console.log('PDF path:', pdfPath);
-      
       if (pdfPath) {
         const pathParts = pdfPath.split('/');
         const filename = pathParts[pathParts.length - 1];
         const downloadUrl = `/api/download-pdf/${encodeURIComponent(filename)}`;
-        console.log('Download URL:', downloadUrl);
-        
-        // Open in a new tab first to test
+        console.log('Attempting to download from:', downloadUrl);
         window.open(downloadUrl, '_blank');
       } else {
         alert('No PDF path found in saved data');
@@ -120,7 +98,6 @@ const SummaryResult = () => {
                 className="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 transition-colors flex items-center gap-2"
                 style={{
                   cursor: 'pointer',
-                  opacity: '1',
                   pointerEvents: 'auto'
                 }}
               >
