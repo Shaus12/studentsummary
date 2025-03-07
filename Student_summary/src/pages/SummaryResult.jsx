@@ -19,6 +19,21 @@ const SummaryResult = () => {
   useEffect(() => {
     console.log("Component mounted");
     
+    // Add the working console code directly in the component
+    setTimeout(() => {
+      const pdfButton = Array.from(document.querySelectorAll('button')).find(btn => 
+        btn.innerText.includes('הורד PDF')
+      );
+      
+      if (pdfButton) {
+        console.log('Found PDF button, enabling it');
+        pdfButton.disabled = false;
+        pdfButton.style.backgroundColor = '#2563eb';
+        pdfButton.style.cursor = 'pointer';
+        pdfButton.onclick = handleDownloadPDF;
+      }
+    }, 100);  // Small delay to ensure button is rendered
+
     // Try to get data from localStorage first
     const savedSummary = localStorage.getItem('lastProcessedSummary');
     console.log('Saved summary:', savedSummary);
