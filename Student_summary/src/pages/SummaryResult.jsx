@@ -75,9 +75,10 @@ const SummaryResult = () => {
                     alert('No PDF path available');
                   }
                 }}
-                style={{ display: 'block', padding: '10px 20px', backgroundColor: '#2563eb', color: 'white', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold' }}
+                className="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 transition-colors flex items-center gap-2"
               >
-                הורד PDF
+                <span>הורד PDF</span>
+                <span>📄</span>
               </button>
             </div>
           </div>
