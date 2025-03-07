@@ -434,21 +434,19 @@ app.post('/api/upload-audio', upload.single('audioFile'), async (req, res) => {
   }
 });
 
-// Update your audio processing endpoint
-app.post('/api/process-audio', upload.single('audioFile'), async (req, res) => {
+// Update the process-audio endpoint to accept any field name
+app.post('/api/process-audio', upload.any(), async (req, res) => {
   try {
-    console.log('Audio file upload request received');
+    console.log('Audio processing request received');
+    console.log('Files:', req.files);
+    console.log('Body:', req.body);
     
-    if (!req.file) {
-      return res.status(400).json({ 
-        error: 'No audio file uploaded',
-        success: false
-      });
+    if (!req.files || req.files.length === 0) {
+      return res.status(400).json({ error: 'No audio file uploaded' });
     }
     
-    console.log(`Audio file uploaded: ${req.file.path}`);
-    console.log(`Original filename: ${req.file.originalname}`);
-    console.log(`File size: ${req.file.size} bytes`);
+    const file = req.files[0];
+    console.log('File uploaded for processing:', file);
     
     // Get user email from token
     const token = req.headers.authorization?.split(' ')[1];
@@ -464,44 +462,52 @@ app.post('/api/process-audio', upload.single('audioFile'), async (req, res) => {
       return res.status(401).json({ error: 'Invalid token' });
     }
     
-    // Get processing options from request body
-    const options = {
-      outputType: req.body.outputType || 'summary',
-      includeTranscription: req.body.includeTranscription === 'true',
-      language: 'he', // Default to Hebrew
-      summaryOptions: req.body.summaryOptions ? 
-        (typeof req.body.summaryOptions === 'string' ? 
-          JSON.parse(req.body.summaryOptions) : req.body.summaryOptions) : 
-        { language: 'he', style: 'detailed', format: 'bullets' }
-    };
+    // Check if user has reached their limit
+    const usageCheck = await checkAndUpdateUsage(userEmail);
+    if (!usageCheck.allowed) {
+      return res.status(403).json({ error: usageCheck.message });
+    }
     
-    console.log('Processing options:', options);
+    console.log('Starting to process file:', file.path);
     
-    // Process the uploaded file
-    const { processAudioFile } = await import('./Transcribe_and_summarize/audio.js');
-    const result = await processAudioFile(req.file.path, options);
+    // Process the audio file
+    const transcript = await transcribeAudio(file.path);
+    const summary = await summarizeText(transcript);
+    const pdfPath = await generatePDF(summary);
     
-    // Save the result to the database
-    const insertResult = await db.query(
-      `INSERT INTO summaries (user_email, file_name, summary, created_at)
-       VALUES ($1, $2, $3, NOW())
+    console.log('PDF generated at path:', pdfPath);
+    
+    // Format the PDF path correctly for client access
+    const relativePdfPath = pdfPath ? `/files/${path.basename(pdfPath)}` : null;
+    console.log('Relative PDF path for client:', relativePdfPath);
+    
+    // Save to database
+    const result = await db.query(
+      `INSERT INTO summaries (user_email, summary, pdf_path, file_name, created_at)
+       VALUES ($1, $2, $3, $4, NOW())
        RETURNING id`,
-      [userEmail, req.file.originalname, result.summary || result.transcription]
+      [userEmail, summary, pdfPath, file.originalname]
     );
     
-    const summaryId = insertResult.rows[0].id;
+    const summaryId = result.rows[0].id;
     
-    // Return the result
-    res.json({
-      id: summaryId,
-      summary: result.summary || result.transcription,
-      success: true
+    // Clean up the original file
+    await cleanupFile(file.path);
+    
+    console.log('File processed successfully');
+    
+    // Return the summary and pdfPath directly
+    res.json({ 
+      success: true,
+      summary: summary,
+      pdfPath: relativePdfPath
     });
+    
   } catch (error) {
-    console.error('Error processing uploaded audio:', error);
+    console.error('Error processing audio file:', error);
     res.status(500).json({ 
-      error: error.message,
-      success: false
+      error: 'Failed to process audio file', 
+      details: error.message 
     });
   }
 });
@@ -720,32 +726,6 @@ app.get('/api/download-pdf', async (req, res) => {
   } catch (error) {
     console.error('Error downloading PDF:', error);
     res.status(500).send('Error downloading PDF');
-  }
-});
-
-// Add this endpoint to handle PDF downloads
-app.get('/api/download-pdf/:filename', (req, res) => {
-  try {
-    const { filename } = req.params;
-    console.log('Download request for PDF:', filename);
-    
-    const filePath = path.join(__dirname, 'temp', filename);
-    console.log('Full path:', filePath);
-    
-    if (!fs.existsSync(filePath)) {
-      console.error('PDF file not found:', filePath);
-      return res.status(404).send('PDF not found');
-    }
-
-    res.download(filePath, filename, (err) => {
-      if (err) {
-        console.error('Error sending file:', err);
-        res.status(500).send('Error downloading file');
-      }
-    });
-  } catch (error) {
-    console.error('Error in download endpoint:', error);
-    res.status(500).send('Server error');
   }
 });
 
