@@ -12,41 +12,10 @@ const SummaryResult = () => {
   
   const [summaryData, setSummaryData] = useState(location.state || {});
   const [isDownloading, setIsDownloading] = useState(false);
+  const [isButtonEnabled, setIsButtonEnabled] = useState(true);
 
   // Add a ref to get direct access to the button
   const buttonRef = useRef(null);
-
-  // Add this new useEffect to continuously check and enable the button
-  useEffect(() => {
-    const enableButton = () => {
-      const pdfButton = Array.from(document.querySelectorAll('button')).find(btn => 
-        btn.innerText.includes('הורד PDF')
-      );
-      
-      if (pdfButton) {
-        console.log('Found PDF button, enabling it');
-        pdfButton.removeAttribute('disabled');
-        pdfButton.disabled = false;
-        pdfButton.style.cursor = 'pointer';
-        pdfButton.style.pointerEvents = 'auto';
-        pdfButton.onclick = handleDownloadPDF;
-      }
-    };
-
-    // Run immediately
-    enableButton();
-    
-    // Run again after a short delay
-    const timeoutId = setTimeout(enableButton, 100);
-    
-    // Also run periodically
-    const intervalId = setInterval(enableButton, 1000);
-
-    return () => {
-      clearTimeout(timeoutId);
-      clearInterval(intervalId);
-    };
-  }, []);
 
   useEffect(() => {
     const savedSummary = localStorage.getItem('lastProcessedSummary');
@@ -77,24 +46,32 @@ const SummaryResult = () => {
 
   const handleDownloadPDF = (e) => {
     if (e) e.preventDefault();
-    console.log('Button clicked');
-    const savedSummary = localStorage.getItem('lastProcessedSummary');
-    console.log('Using saved summary:', savedSummary);
     
-    if (savedSummary) {
+    try {
+      const savedSummary = localStorage.getItem('lastProcessedSummary');
+      console.log('Using saved summary:', savedSummary);
+      
+      if (!savedSummary) {
+        alert('No saved summary found in localStorage');
+        return;
+      }
+
       const parsedData = JSON.parse(savedSummary);
       const pdfPath = parsedData.pdfPath;
-      if (pdfPath) {
-        const pathParts = pdfPath.split('/');
-        const filename = pathParts[pathParts.length - 1];
-        const downloadUrl = `/api/download-pdf/${encodeURIComponent(filename)}`;
-        console.log('Attempting to download from:', downloadUrl);
-        window.open(downloadUrl, '_blank');
-      } else {
+      
+      if (!pdfPath) {
         alert('No PDF path found in saved data');
+        return;
       }
-    } else {
-      alert('No saved summary found in localStorage');
+
+      const pathParts = pdfPath.split('/');
+      const filename = pathParts[pathParts.length - 1];
+      const downloadUrl = `/api/download-pdf/${encodeURIComponent(filename)}`;
+      console.log('Attempting to download from:', downloadUrl);
+      window.open(downloadUrl, '_blank');
+    } catch (error) {
+      console.error('Error downloading PDF:', error);
+      alert('Error downloading PDF');
     }
   };
 
@@ -112,14 +89,9 @@ const SummaryResult = () => {
                 חזור
               </button>
               <button
-                ref={buttonRef}
                 onClick={handleDownloadPDF}
-                className="!w-auto !bg-none !p-0 px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors"
-                style={{
-                  background: 'rgb(37 99 235)', // This is the blue-600 color
-                  width: 'auto',
-                  padding: '0.5rem 1rem'
-                }}
+                disabled={!isButtonEnabled}
+                className="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 transition-colors flex items-center gap-2"
               >
                 הורד PDF
               </button>
