@@ -10,5 +10,10 @@ export default defineConfig({
         changeOrigin: true,
       }
     }
+  },
+  publicDir: 'public',
+  build: {
+    assetsDir: 'assets',
+    copyPublicDir: true
   }
 }) 

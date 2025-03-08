@@ -4,8 +4,8 @@ const Hero = () => {
   return (
     <div className="bg-gradient-to-br from-white via-indigo-50 to-blue-100 py-24">
       <div className="container mx-auto px-4 max-w-6xl">
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-12 items-center">
-          <div className="text-right order-2 md:order-1 pl-32 relative left-12">
+        <div className="flex flex-col items-center text-center">
+          <div className="max-w-3xl mx-auto">
             <div className="mb-8">
               <span className="inline-block bg-indigo-100 text-indigo-800 px-4 py-2 rounded-full text-sm font-semibold mb-6">
                 🚀 הדור הבא של למידה
@@ -19,40 +19,13 @@ const Hero = () => {
               </p>
             </div>
             
-            <div className="space-y-6">
-              <button className="w-full md:w-auto bg-indigo-600 text-white px-8 py-4 rounded-xl hover:bg-indigo-700 transition-all transform hover:scale-105 shadow-lg hover:shadow-xl font-medium text-lg">
+            <div className="flex flex-col items-center space-y-6">
+              <button className="w-64 bg-indigo-600 text-white px-8 py-4 rounded-xl hover:bg-indigo-700 transition-all transform hover:scale-105 shadow-lg hover:shadow-xl font-medium text-lg">
                 התחל בחינם ←
               </button>
               
-              <div className="flex items-center justify-end space-x-4 space-x-reverse mt-8">
-                
+              <div className="flex items-center space-x-4 space-x-reverse mt-8">
                 <div className="text-sm text-gray-600">
-                </div>
-              </div>
-            </div>
-          </div>
-          
-          <div className="order-1 md:order-2 -ml-24 transform-gpu relative">
-            <div className="relative">
-              <div className="absolute inset-0 bg-gradient-to-tr from-indigo-500/30 to-blue-500/30 rounded-3xl blur-2xl"></div>
-              <img 
-                src="public\hero_image.jpeg" 
-                alt="תיאור התמונה" 
-                className="relative rounded-3xl shadow-2xl transform transition-transform hover:scale-105 duration-500 ease-in-out"
-              />
-              
-              {/* Floating Elements */}
-              <div className="absolute -top-4 -right-4 bg-white p-4 rounded-xl shadow-lg">
-                <div className="flex items-center space-x-2 space-x-reverse">
-                  <div className="text-green-500 text-2xl">📈</div>
-                  <div className="text-sm font-medium">חסכון של 80% בזמן</div>
-                </div>
-              </div>
-              
-              <div className="absolute -bottom-4 -left-4 bg-white p-4 rounded-xl shadow-lg">
-                <div className="flex items-center space-x-2 space-x-reverse">
-                  <div className="text-blue-500 text-2xl">🎯</div>
-                  <div className="text-sm font-medium">דיוק של 95%</div>
                 </div>
               </div>
             </div>
