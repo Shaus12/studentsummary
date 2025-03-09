@@ -175,7 +175,7 @@ app.post("/api/upgrade-membership", async (req, res) => {
   }
 });
 
-app.post('/api/signup', async (req, res) => {
+app.post("/api/signup", async (req, res) => {
   try {
     // Add debug logging to see what we're receiving
     console.log('Signup request body:', {
@@ -184,18 +184,6 @@ app.post('/api/signup', async (req, res) => {
     });
 
     const { email, password, firstName, lastName } = req.body;
-
-    // Debug log the extracted values
-    console.log('Extracted values:', {
-      email: typeof email,
-      password: typeof password,
-      firstName: typeof firstName,
-      lastName: typeof lastName,
-      hasEmail: !!email,
-      hasPassword: !!password,
-      hasFirstName: !!firstName,
-      hasLastName: !!lastName
-    });
 
     // Validate all required fields
     if (!email || !password || !firstName || !lastName) {
@@ -216,6 +204,14 @@ app.post('/api/signup', async (req, res) => {
       });
     }
 
+    // Check for existing user
+    const userCheck = await db.query("SELECT * FROM users WHERE email = $1", [
+      email,
+    ]);
+    if (userCheck.rows.length > 0) {
+      return res.status(400).json({ message: "User already exists" });
+    }
+
     // Hash password only if it exists
     if (!password) {
       throw new Error('Password is required');
@@ -224,12 +220,12 @@ app.post('/api/signup', async (req, res) => {
     const hashedPassword = await bcrypt.hash(password, 10);
 
     const result = await db.query(
-      'INSERT INTO users (email, password, first_name, last_name, membership_type) VALUES ($1, $2, $3, $4, $5) RETURNING *',
+      "INSERT INTO users (email, password, first_name, last_name, membership_type) VALUES ($1, $2, $3, $4, $5) RETURNING *",
       [email, hashedPassword, firstName, lastName, 'free']
     );
 
-    res.json({ 
-      message: 'Registration successful',
+    res.status(201).json({ 
+      message: "User registered successfully",
       user: {
         email: result.rows[0].email,
         firstName: result.rows[0].first_name,
