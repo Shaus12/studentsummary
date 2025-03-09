@@ -17,13 +17,11 @@ function SignUp() {
   const handleSubmit = async (e) => {
     e.preventDefault();
     
-    // Validate passwords match
     if (formData.password !== formData.confirmPassword) {
       alert('הסיסמאות אינן תואמות');
       return;
     }
 
-    // Create request body
     const requestData = {
       email: formData.email,
       password: formData.password,
@@ -31,31 +29,49 @@ function SignUp() {
       lastName: formData.lastName
     };
 
-    // Debug log
-    console.log('Sending signup request with data:', requestData);
+    console.log('Sending signup data:', requestData);
 
     try {
-      const response = await fetch('/api/signup', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Accept': 'application/json'
-        },
-        body: JSON.stringify(requestData),
-        credentials: 'same-origin'
-      });
-
-      console.log('Raw response:', response);
+      // Use XMLHttpRequest instead of fetch to bypass service worker
+      const xhr = new XMLHttpRequest();
+      xhr.open('POST', '/api/signup', true);
+      xhr.setRequestHeader('Content-Type', 'application/json');
       
-      const responseData = await response.json();
-      console.log('Response data:', responseData);
+      xhr.onload = function() {
+        console.log('Response status:', xhr.status);
+        console.log('Response text:', xhr.responseText);
+        
+        if (xhr.status === 200) {
+          try {
+            const response = JSON.parse(xhr.responseText);
+            if (response.token) {
+              localStorage.setItem('token', response.token);
+              navigate('/dashboard');
+            } else {
+              alert('שגיאה בהרשמה: חסר טוקן');
+            }
+          } catch (e) {
+            console.error('Error parsing response:', e);
+            alert('שגיאה בעיבוד התגובה מהשרת');
+          }
+        } else {
+          try {
+            const errorResponse = JSON.parse(xhr.responseText);
+            alert(errorResponse.message || 'שגיאה בהרשמה');
+          } catch (e) {
+            alert('שגיאה בהרשמה');
+          }
+        }
+      };
       
-      if (response.ok) {
-        localStorage.setItem('token', responseData.token);
-        navigate('/dashboard');
-      } else {
-        alert(responseData.message || 'שגיאה בהרשמה');
-      }
+      xhr.onerror = function() {
+        console.error('Request failed');
+        alert('שגיאה בתקשורת עם השרת');
+      };
+      
+      // Send the request
+      xhr.send(JSON.stringify(requestData));
+      
     } catch (error) {
       console.error('Signup error:', error);
       alert('שגיאה בהרשמה');
