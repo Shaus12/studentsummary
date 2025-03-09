@@ -7,23 +7,23 @@ import API_BASE_URL from '../config';
 function SignUp() {
   const navigate = useNavigate();
   const [formData, setFormData] = useState({
-    firstName: '',
-    lastName: '',
     email: '',
     password: '',
-    confirmPassword: ''
+    confirmPassword: '',
+    firstName: '',
+    lastName: ''
   });
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     
-    console.log('Form submitted with:', formData);
-
+    // Validate passwords match
     if (formData.password !== formData.confirmPassword) {
       alert('הסיסמאות אינן תואמות');
       return;
     }
 
+    // Create request body
     const requestData = {
       email: formData.email,
       password: formData.password,
@@ -31,53 +31,37 @@ function SignUp() {
       lastName: formData.lastName
     };
 
-    const url = `${API_BASE_URL}/api/signup`;
-    console.log('Sending request to:', url);
-    console.log('With data:', { ...requestData, password: '[REDACTED]' });
-
     try {
-      // Force the request to bypass service worker
-      const response = await fetch(url, {
+      const response = await fetch('/api/signup', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Accept': 'application/json',
-          'Cache-Control': 'no-cache',
-          'Pragma': 'no-cache'
         },
-        body: JSON.stringify(requestData),
-        cache: 'no-store',
-        credentials: 'same-origin',
-        mode: 'cors'
+        body: JSON.stringify(requestData)
       });
 
-      console.log('Response status:', response.status);
-      const responseText = await response.text();
-      console.log('Response text:', responseText);
-
+      console.log('Response:', response);
+      
       if (response.ok) {
-        navigate('/signup-success');
+        const data = await response.json();
+        localStorage.setItem('token', data.token);
+        navigate('/dashboard');
       } else {
-        try {
-          const errorData = JSON.parse(responseText);
-          console.error('Server error:', errorData);
-          alert(errorData.message || 'שגיאה בהרשמה');
-        } catch (e) {
-          console.error('Error parsing response:', responseText);
-          alert('שגיאה בהרשמה');
-        }
+        const errorData = await response.json();
+        alert(errorData.message || 'שגיאה בהרשמה');
       }
     } catch (error) {
-      console.error('Network error:', error);
+      console.error('Error:', error);
       alert('שגיאה בהרשמה');
     }
   };
 
-  const handleChange = (e) => {
-    setFormData({
-      ...formData,
-      [e.target.name]: e.target.value
-    });
+  const handleInputChange = (e) => {
+    const { name, value } = e.target;
+    setFormData(prev => ({
+      ...prev,
+      [name]: value
+    }));
   };
 
   return (
@@ -92,7 +76,7 @@ function SignUp() {
             id="firstName"
             name="firstName"
             value={formData.firstName}
-            onChange={handleChange}
+            onChange={handleInputChange}
             required
           />
         </div>
@@ -104,7 +88,7 @@ function SignUp() {
             id="lastName"
             name="lastName"
             value={formData.lastName}
-            onChange={handleChange}
+            onChange={handleInputChange}
             required
           />
         </div>
@@ -116,8 +100,9 @@ function SignUp() {
             id="email"
             name="email"
             value={formData.email}
-            onChange={handleChange}
+            onChange={handleInputChange}
             required
+            className="..."
           />
         </div>
 
@@ -128,7 +113,7 @@ function SignUp() {
             id="password"
             name="password"
             value={formData.password}
-            onChange={handleChange}
+            onChange={handleInputChange}
             required
           />
         </div>
@@ -140,7 +125,7 @@ function SignUp() {
             id="confirmPassword"
             name="confirmPassword"
             value={formData.confirmPassword}
-            onChange={handleChange}
+            onChange={handleInputChange}
             required
           />
         </div>
