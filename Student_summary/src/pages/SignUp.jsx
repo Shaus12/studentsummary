@@ -31,33 +31,40 @@ function SignUp() {
       lastName: formData.lastName
     };
 
+    // Debug log
+    console.log('Sending signup request with data:', requestData);
+
     try {
       const response = await fetch('/api/signup', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          'Accept': 'application/json'
         },
-        body: JSON.stringify(requestData)
+        body: JSON.stringify(requestData),
+        credentials: 'same-origin'
       });
 
-      console.log('Response:', response);
+      console.log('Raw response:', response);
+      
+      const responseData = await response.json();
+      console.log('Response data:', responseData);
       
       if (response.ok) {
-        const data = await response.json();
-        localStorage.setItem('token', data.token);
+        localStorage.setItem('token', responseData.token);
         navigate('/dashboard');
       } else {
-        const errorData = await response.json();
-        alert(errorData.message || 'שגיאה בהרשמה');
+        alert(responseData.message || 'שגיאה בהרשמה');
       }
     } catch (error) {
-      console.error('Error:', error);
+      console.error('Signup error:', error);
       alert('שגיאה בהרשמה');
     }
   };
 
   const handleInputChange = (e) => {
     const { name, value } = e.target;
+    console.log(`Updating ${name} to:`, value);
     setFormData(prev => ({
       ...prev,
       [name]: value
@@ -75,9 +82,11 @@ function SignUp() {
             type="text"
             id="firstName"
             name="firstName"
-            value={formData.firstName}
+            value={formData.firstName || ''}
             onChange={handleInputChange}
+            placeholder="שם פרטי"
             required
+            className="..."
           />
         </div>
 
@@ -87,9 +96,11 @@ function SignUp() {
             type="text"
             id="lastName"
             name="lastName"
-            value={formData.lastName}
+            value={formData.lastName || ''}
             onChange={handleInputChange}
+            placeholder="שם משפחה"
             required
+            className="..."
           />
         </div>
 
@@ -99,8 +110,9 @@ function SignUp() {
             type="email"
             id="email"
             name="email"
-            value={formData.email}
+            value={formData.email || ''}
             onChange={handleInputChange}
+            placeholder="אימייל"
             required
             className="..."
           />
@@ -112,9 +124,11 @@ function SignUp() {
             type="password"
             id="password"
             name="password"
-            value={formData.password}
+            value={formData.password || ''}
             onChange={handleInputChange}
+            placeholder="סיסמה"
             required
+            className="..."
           />
         </div>
 
@@ -124,13 +138,17 @@ function SignUp() {
             type="password"
             id="confirmPassword"
             name="confirmPassword"
-            value={formData.confirmPassword}
+            value={formData.confirmPassword || ''}
             onChange={handleInputChange}
+            placeholder="אימות סיסמה"
             required
+            className="..."
           />
         </div>
 
-        <button type="submit">הרשם</button>
+        <button type="submit" className="...">
+          הרשמה
+        </button>
         
         <div className="login-link">
           כבר יש לך חשבון? <a href="/login">התחבר כאן</a>
