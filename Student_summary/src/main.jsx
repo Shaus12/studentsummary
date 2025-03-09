@@ -1,5 +1,4 @@
 import './unregisterServiceWorker';
-import { cleanupServiceWorkers } from './serviceWorkerCleanup';
 
 import React from 'react'
 import ReactDOM from 'react-dom/client'
@@ -15,11 +14,8 @@ if ('serviceWorker' in navigator) {
   });
 }
 
-// Clean up service workers before rendering
-cleanupServiceWorkers().then(() => {
-  ReactDOM.createRoot(document.getElementById('root')).render(
-    <React.StrictMode>
-      <App />
-    </React.StrictMode>
-  );
-});
+ReactDOM.createRoot(document.getElementById('root')).render(
+  <React.StrictMode>
+    <App />
+  </React.StrictMode>
+);
