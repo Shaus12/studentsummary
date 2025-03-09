@@ -177,23 +177,22 @@ app.post("/api/upgrade-membership", async (req, res) => {
 
 app.post("/api/signup", async (req, res) => {
   try {
-    // Add debug logging to see what we're receiving
-    console.log('Signup request body:', {
-      ...req.body,
-      password: req.body.password ? '[PRESENT]' : '[MISSING]'
-    });
+    // Log the raw request
+    console.log('Raw request body:', req.body);
+    console.log('Request headers:', req.headers);
 
     const { email, password, firstName, lastName } = req.body;
 
     // Validate all required fields
     if (!email || !password || !firstName || !lastName) {
-      console.log('Missing required fields:', { 
-        hasEmail: !!email, 
-        hasPassword: !!password,
-        hasFirstName: !!firstName,
-        hasLastName: !!lastName 
+      console.log('Missing fields:', {
+        email: !!email,
+        password: !!password,
+        firstName: !!firstName,
+        lastName: !!lastName,
+        rawBody: req.body
       });
-      return res.status(400).json({ 
+      return res.status(400).json({
         error: 'Missing required fields',
         details: {
           email: !email ? 'missing' : 'present',
@@ -203,6 +202,14 @@ app.post("/api/signup", async (req, res) => {
         }
       });
     }
+
+    // Log the parsed data
+    console.log('Parsed signup data:', {
+      email,
+      hasPassword: !!password,
+      firstName,
+      lastName
+    });
 
     // Check for existing user
     const userCheck = await db.query("SELECT * FROM users WHERE email = $1", [
@@ -234,14 +241,7 @@ app.post("/api/signup", async (req, res) => {
     });
 
   } catch (error) {
-    console.error('Registration error details:', {
-      error: error.message,
-      stack: error.stack,
-      requestBody: {
-        ...req.body,
-        password: req.body.password ? '[PRESENT]' : '[MISSING]'
-      }
-    });
+    console.error('Signup error:', error);
     res.status(500).json({ error: 'Registration failed', details: error.message });
   }
 });
