@@ -38,10 +38,10 @@ dotenv.config();
 const app = express();
 const PORT = process.env.PORT || 5001;
 
-app.use(express.json());
 app.use(cors({
-  origin: '*', // Allow all origins
-  credentials: true
+  origin: 'https://tachlesai.com',
+  credentials: true,
+  methods: ['GET', 'POST', 'OPTIONS']
 }));
 
 // Create temp directory if it doesn't exist

@@ -16,38 +16,50 @@ function SignUp() {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    console.log('Form submitted', formData);
+    console.log('Form submitted:', formData);
 
     if (formData.password !== formData.confirmPassword) {
       alert('הסיסמאות אינן תואמות');
       return;
     }
 
+    const requestData = {
+      email: formData.email,
+      password: formData.password,
+      firstName: formData.firstName,
+      lastName: formData.lastName
+    };
+
     try {
-      console.log('Sending request to server...');
-      const response = await fetch(`${API_BASE_URL}/api/signup`, {
+      const url = `${API_BASE_URL}/api/signup`;
+      console.log('Sending request to:', url);
+      console.log('With data:', { ...requestData, password: '[REDACTED]' });
+
+      const response = await fetch(url, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({
-          email: formData.email,
-          password: formData.password,
-          firstName: formData.firstName,
-          lastName: formData.lastName
-        })
+        body: JSON.stringify(requestData)
       });
 
-      console.log('Response received:', response);
+      console.log('Response status:', response.status);
+      const responseText = await response.text();
+      console.log('Response text:', responseText);
 
       if (response.ok) {
         navigate('/signup-success');
       } else {
-        const data = await response.json();
-        alert(data.message || 'שגיאה בהרשמה');
+        try {
+          const errorData = JSON.parse(responseText);
+          alert(errorData.message || 'שגיאה בהרשמה');
+        } catch (e) {
+          console.error('Error parsing response:', responseText);
+          alert('שגיאה בהרשמה');
+        }
       }
     } catch (error) {
-      console.error('Error:', error);
+      console.error('Signup error:', error);
       alert('שגיאה בהרשמה');
     }
   };
