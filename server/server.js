@@ -175,28 +175,59 @@ app.post("/api/upgrade-membership", async (req, res) => {
   }
 });
 
-app.post("/api/signup", async (req, res) => {
-  const { email, password, firstName, lastName } = req.body;
-
+app.post('/api/signup', async (req, res) => {
   try {
-    const userCheck = await db.query("SELECT * FROM users WHERE email = $1", [
-      email,
-    ]);
-    if (userCheck.rows.length > 0) {
-      return res.status(400).json({ message: "User already exists" });
+    // Add debug logging to see what we're receiving
+    console.log('Signup request body:', {
+      ...req.body,
+      password: req.body.password ? '[PRESENT]' : '[MISSING]'
+    });
+
+    const { email, password, firstName, lastName } = req.body;
+
+    // Validate all required fields
+    if (!email || !password || !firstName || !lastName) {
+      console.log('Missing required fields:', { 
+        hasEmail: !!email, 
+        hasPassword: !!password,
+        hasFirstName: !!firstName,
+        hasLastName: !!lastName 
+      });
+      return res.status(400).json({ 
+        error: 'Missing required fields',
+        details: {
+          email: !email ? 'missing' : 'present',
+          password: !password ? 'missing' : 'present',
+          firstName: !firstName ? 'missing' : 'present',
+          lastName: !lastName ? 'missing' : 'present'
+        }
+      });
     }
 
-    const hashedPassword = await bcrypt.hash(password, 12);
+    // Hash password only if it exists
+    const hashedPassword = await bcrypt.hash(password, 10);
 
-    await db.query(
-      "INSERT INTO users (email, password, first_name, last_name, membership_type) VALUES ($1, $2, $3, $4, $5) RETURNING *",
+    const result = await db.query(
+      'INSERT INTO users (email, password, first_name, last_name, membership_type) VALUES ($1, $2, $3, $4, $5) RETURNING *',
       [email, hashedPassword, firstName, lastName, 'free']
     );
 
-    res.status(201).json({ message: "User registered successfully" });
-  } catch (err) {
-    console.error('Registration error:', err);
-    res.status(500).json({ message: "Internal Server Error" });
+    res.json({ 
+      message: 'Registration successful',
+      user: {
+        email: result.rows[0].email,
+        firstName: result.rows[0].first_name,
+        lastName: result.rows[0].last_name
+      }
+    });
+
+  } catch (error) {
+    console.error('Registration error details:', {
+      error: error.message,
+      stack: error.stack,
+      body: req.body
+    });
+    res.status(500).json({ error: 'Registration failed', details: error.message });
   }
 });
 
