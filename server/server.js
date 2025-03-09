@@ -185,6 +185,18 @@ app.post('/api/signup', async (req, res) => {
 
     const { email, password, firstName, lastName } = req.body;
 
+    // Debug log the extracted values
+    console.log('Extracted values:', {
+      email: typeof email,
+      password: typeof password,
+      firstName: typeof firstName,
+      lastName: typeof lastName,
+      hasEmail: !!email,
+      hasPassword: !!password,
+      hasFirstName: !!firstName,
+      hasLastName: !!lastName
+    });
+
     // Validate all required fields
     if (!email || !password || !firstName || !lastName) {
       console.log('Missing required fields:', { 
@@ -205,6 +217,10 @@ app.post('/api/signup', async (req, res) => {
     }
 
     // Hash password only if it exists
+    if (!password) {
+      throw new Error('Password is required');
+    }
+
     const hashedPassword = await bcrypt.hash(password, 10);
 
     const result = await db.query(
@@ -225,7 +241,10 @@ app.post('/api/signup', async (req, res) => {
     console.error('Registration error details:', {
       error: error.message,
       stack: error.stack,
-      body: req.body
+      requestBody: {
+        ...req.body,
+        password: req.body.password ? '[PRESENT]' : '[MISSING]'
+      }
     });
     res.status(500).json({ error: 'Registration failed', details: error.message });
   }
