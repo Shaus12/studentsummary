@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import API_BASE_URL from '../config';
 
 function YouTubeInput() {
   const [url, setUrl] = useState('');
@@ -20,7 +21,7 @@ function YouTubeInput() {
     try {
       console.log('Sending request with URL:', url);
       const token = localStorage.getItem('token');
-      const response = await fetch('http://localhost:5001/api/process-youtube', {
+      const response = await fetch(`${API_BASE_URL}/process-youtube`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

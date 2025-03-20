@@ -1,3 +1,10 @@
+/* Check if this file exists and has content */
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Your other global styles */
+
 .youtube-summarizer {
   max-width: 800px;
   margin: 2rem auto;

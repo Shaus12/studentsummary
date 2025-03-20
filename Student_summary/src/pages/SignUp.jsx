@@ -29,52 +29,35 @@ function SignUp() {
       lastName: formData.lastName
     };
 
-    console.log('Sending signup data:', requestData);
+    console.log('Form submitted', requestData);
+    console.log('Sending request to server...');
 
     try {
-      // Use XMLHttpRequest instead of fetch to bypass service worker
-      const xhr = new XMLHttpRequest();
-      xhr.open('POST', '/api/signup', true);
-      xhr.setRequestHeader('Content-Type', 'application/json');
+      const response = await fetch(`${API_BASE_URL}/signup`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(requestData)
+      });
+
+      console.log('Response received:', response);
       
-      xhr.onload = function() {
-        console.log('Response status:', xhr.status);
-        console.log('Response text:', xhr.responseText);
-        
-        if (xhr.status === 200) {
-          try {
-            const response = JSON.parse(xhr.responseText);
-            if (response.token) {
-              localStorage.setItem('token', response.token);
-              navigate('/dashboard');
-            } else {
-              alert('שגיאה בהרשמה: חסר טוקן');
-            }
-          } catch (e) {
-            console.error('Error parsing response:', e);
-            alert('שגיאה בעיבוד התגובה מהשרת');
-          }
+      if (response.ok) {
+        const data = await response.json();
+        if (data.token) {
+          localStorage.setItem('token', data.token);
+          navigate('/dashboard');
         } else {
-          try {
-            const errorResponse = JSON.parse(xhr.responseText);
-            alert(errorResponse.message || 'שגיאה בהרשמה');
-          } catch (e) {
-            alert('שגיאה בהרשמה');
-          }
+          throw new Error('No token in response');
         }
-      };
-      
-      xhr.onerror = function() {
-        console.error('Request failed');
-        alert('שגיאה בתקשורת עם השרת');
-      };
-      
-      // Send the request
-      xhr.send(JSON.stringify(requestData));
-      
+      } else {
+        const errorData = await response.json();
+        throw new Error(errorData.message || 'Signup failed');
+      }
     } catch (error) {
       console.error('Signup error:', error);
-      alert('שגיאה בהרשמה');
+      alert(`שגיאה בהרשמה: ${error.message}`);
     }
   };
 

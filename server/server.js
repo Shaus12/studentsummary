@@ -38,8 +38,24 @@ dotenv.config();
 const app = express();
 const PORT = process.env.PORT || 5001;
 
+// Update CORS configuration
+const allowedOrigins = [
+  'http://localhost:3000',
+  'http://localhost:5173',
+  'https://tachlesai.com'
+];
+
 app.use(cors({
-  origin: 'https://tachlesai.com',
+  origin: function(origin, callback) {
+    // Allow requests with no origin
+    if (!origin) return callback(null, true);
+    
+    if (allowedOrigins.indexOf(origin) !== -1 || process.env.NODE_ENV === 'development') {
+      callback(null, true);
+    } else {
+      callback(new Error('Not allowed by CORS'));
+    }
+  },
   credentials: true,
   methods: ['GET', 'POST', 'OPTIONS']
 }));

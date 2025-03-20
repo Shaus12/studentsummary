@@ -3,6 +3,7 @@ import { Card, CardContent } from '../components/ui/card';
 import { useNavigate } from 'react-router-dom';
 import UsageStatus from '../components/UsageStatus';
 import Navbar from '../components/Navbar';
+import API_BASE_URL from '../config';
 
 const StudentDashboard = () => {
   const navigate = useNavigate();
@@ -44,7 +45,7 @@ const StudentDashboard = () => {
     const checkUsageLimit = async () => {
       try {
         const token = localStorage.getItem('token');
-        const response = await fetch('http://localhost:5001/api/usage-status', {
+        const response = await fetch(`${API_BASE_URL}/usage-status`, {
           headers: {
             'Authorization': `Bearer ${token}`
           }
@@ -65,7 +66,7 @@ const StudentDashboard = () => {
   const fetchSummaries = async () => {
     try {
       const token = localStorage.getItem('token');
-      const response = await fetch('http://localhost:5001/api/summaries', {
+      const response = await fetch(`${API_BASE_URL}/summaries`, {
         headers: {
           'Authorization': `Bearer ${token}`
         }
@@ -80,7 +81,7 @@ const StudentDashboard = () => {
   const fetchUsageStatus = async () => {
     try {
       const token = localStorage.getItem('token');
-      const response = await fetch('http://localhost:5001/api/usage-status', {
+      const response = await fetch(`${API_BASE_URL}/usage-status`, {
         headers: {
           'Authorization': `Bearer ${token}`
         }
@@ -105,10 +106,11 @@ const StudentDashboard = () => {
   const handleUpgradeMembership = async () => {
     try {
       const token = localStorage.getItem('token');
-      const response = await fetch('http://localhost:5001/api/upgrade-membership', {
+      const response = await fetch(`${API_BASE_URL}/upgrade-membership`, {
         method: 'POST',
         headers: {
-          'Authorization': `Bearer ${token}`
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
         }
       });
       
@@ -136,7 +138,7 @@ const StudentDashboard = () => {
     
     try {
       const token = localStorage.getItem('token');
-      const response = await fetch('http://localhost:5001/api/process-audio', {
+      const response = await fetch(`${API_BASE_URL}/process-audio`, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${token}`
@@ -181,7 +183,7 @@ const StudentDashboard = () => {
       console.log("Sending file to server...");
       
       // Use the relative URL path that will be handled by the service worker
-      fetch('/api/process-audio', {
+      fetch(`${API_BASE_URL}/process-audio`, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${token}`
@@ -237,8 +239,7 @@ const StudentDashboard = () => {
       const token = localStorage.getItem('token');
       console.log("Sending file to server...");
       
-      // Use the relative URL path that will be handled by the service worker
-      fetch('/api/process-audio', {
+      fetch(`${API_BASE_URL}/process-audio`, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${token}`
@@ -292,7 +293,7 @@ const StudentDashboard = () => {
       const token = localStorage.getItem('token');
       console.log('Sending request...'); // Debug log
       
-      const response = await fetch('http://localhost:5001/api/process-youtube', {
+      const response = await fetch(`${API_BASE_URL}/process-youtube`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

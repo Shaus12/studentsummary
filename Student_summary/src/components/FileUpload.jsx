@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import '../styles/FileUpload.css';
+import API_BASE_URL from '../config';
 
 function FileUpload() {
   const [file, setFile] = useState(null);
@@ -35,7 +36,7 @@ function FileUpload() {
 
     try {
       const token = localStorage.getItem('token');
-      const response = await fetch('http://localhost:5001/api/process-audio', {
+      const response = await fetch(`${API_BASE_URL}/process-audio`, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${token}`
