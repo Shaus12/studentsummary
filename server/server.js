@@ -746,16 +746,27 @@ app.get('/api/download-pdf/:filename', async (req, res) => {
   }
 });
 
-// Then later in your code, add this production check
-if (process.env.NODE_ENV === "production") {
-  // Serve static files from the build directory
-  app.use(express.static(path.join(__dirname, '../Student_summary/dist')));
-  
-  // Handle React routing, return all requests to React app
-  app.get('*', (req, res) => {
-    res.sendFile(path.join(__dirname, '../Student_summary/dist/index.html'));
-  });
-}
+// Define the path to the React build directory
+const clientBuildPath = path.join(__dirname, '..', 'Student_summary', 'dist');
+
+// Serve static files from the React app build directory
+app.use(express.static(clientBuildPath));
+
+// Explicitly serve the assets directory with the correct MIME types
+app.use('/assets', express.static(path.join(clientBuildPath, 'assets'), {
+  setHeaders: (res, path) => {
+    if (path.endsWith('.css')) {
+      res.setHeader('Content-Type', 'text/css');
+    } else if (path.endsWith('.js')) {
+      res.setHeader('Content-Type', 'application/javascript');
+    }
+  }
+}));
+
+// For any other request, send the React app's index.html
+app.get('*', (req, res) => {
+  res.sendFile(path.join(clientBuildPath, 'index.html'));
+});
 
 // Start the server
 app.listen(PORT, () => {
