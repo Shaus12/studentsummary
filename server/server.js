@@ -746,8 +746,72 @@ app.get('/api/download-pdf/:filename', async (req, res) => {
   }
 });
 
-// Simplify static file serving
-app.use(express.static(path.join(__dirname, '..', 'Student_summary', 'dist')));
+// Define the path to the React build directory
+const distPath = path.join(__dirname, '..', 'Student_summary', 'dist');
+
+// Serve static files with explicit MIME types
+app.use('/assets', (req, res, next) => {
+  const filePath = path.join(distPath, 'assets', req.path);
+  console.log('Requested asset:', req.path);
+  console.log('Full path:', filePath);
+  
+  if (fs.existsSync(filePath)) {
+    console.log('Asset file exists');
+    
+    // Set the correct MIME type based on file extension
+    if (filePath.endsWith('.css')) {
+      res.setHeader('Content-Type', 'text/css');
+      console.log('Setting Content-Type to text/css');
+    } else if (filePath.endsWith('.js')) {
+      res.setHeader('Content-Type', 'application/javascript');
+      console.log('Setting Content-Type to application/javascript');
+    }
+    
+    // Send the file
+    res.sendFile(filePath);
+  } else {
+    console.log('Asset file does not exist');
+    next();
+  }
+});
+
+// Serve the index.html file for the root path
+app.get('/', (req, res) => {
+  const indexPath = path.join(distPath, 'index.html');
+  console.log('Serving index.html from:', indexPath);
+  
+  if (fs.existsSync(indexPath)) {
+    console.log('index.html file exists');
+    res.sendFile(indexPath);
+  } else {
+    console.log('index.html file does not exist');
+    res.status(404).send('index.html not found');
+  }
+});
+
+// Serve other static files from the dist directory
+app.use(express.static(distPath, {
+  setHeaders: (res, filePath) => {
+    console.log('Serving static file:', filePath);
+    if (filePath.endsWith('.css')) {
+      res.setHeader('Content-Type', 'text/css');
+    } else if (filePath.endsWith('.js')) {
+      res.setHeader('Content-Type', 'application/javascript');
+    }
+  }
+}));
+
+// For any other request, send the React app's index.html
+app.get('*', (req, res) => {
+  const indexPath = path.join(distPath, 'index.html');
+  console.log('Fallback to index.html for path:', req.path);
+  
+  if (fs.existsSync(indexPath)) {
+    res.sendFile(indexPath);
+  } else {
+    res.status(404).send('index.html not found');
+  }
+});
 
 // Add a test route
 app.get('/api/test', (req, res) => {
@@ -755,7 +819,6 @@ app.get('/api/test', (req, res) => {
 });
 
 // Log the structure of the dist directory
-const distPath = path.join(__dirname, '..', 'Student_summary', 'dist');
 console.log('Checking dist directory:', distPath);
 
 if (fs.existsSync(distPath)) {
