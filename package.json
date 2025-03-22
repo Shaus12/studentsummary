@@ -2,7 +2,7 @@
   "type": "module",
   "scripts": {
     "start": "node server/server.js",
-    "build": "npm install -g vite && npm install && npm install --prefix Student_summary && npm run build --prefix Student_summary",
+    "build": "npm install && cd Student_summary && npm install && npm run build && cd ..",
     "dev": "nodemon server/server.js"
   },
   "dependencies": {
