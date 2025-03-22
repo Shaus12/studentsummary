@@ -5,7 +5,7 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import { downloadYouTubeAudio } from './DownloadFromYT.js';
 import { getYouTubeTranscript } from './YouTubeTranscript.js';
-import puppeteer from 'puppeteer';
+import puppeteer from 'puppeteer-core';
 import { createClient } from '@deepgram/sdk';
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import { summarizeText, generatePDF } from './audioProcessing.js';

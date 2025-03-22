@@ -1,4 +1,4 @@
-import puppeteer from 'puppeteer';
+import puppeteer from 'puppeteer-core';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
@@ -21,8 +21,11 @@ export async function generatePDF(content) {
     
     const outputPath = path.join(tempDir, `summary_${Date.now()}.pdf`);
     
-    // Launch browser
+    // Launch browser with puppeteer-core
     const browser = await puppeteer.launch({
+      executablePath: process.env.NODE_ENV === 'production' 
+        ? '/usr/bin/google-chrome'  // Path to Chrome on Render
+        : process.env.CHROME_PATH || '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome', // Local Chrome path
       headless: 'new',
       args: ['--no-sandbox', '--disable-setuid-sandbox']
     });

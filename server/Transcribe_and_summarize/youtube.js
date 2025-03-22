@@ -7,8 +7,12 @@ import { promisify } from 'util';
 import { transcribeAudio } from './audio.js';
 import { summarizeText, cleanupFile } from './utils.js';
 import { YoutubeTranscript } from 'youtube-transcript';
-import puppeteer from 'puppeteer-extra';
+import puppeteer from 'puppeteer-core';
 import StealthPlugin from 'puppeteer-extra-plugin-stealth';
+
+// Create a puppeteer instance with stealth plugin
+// Note: This approach needs to be modified for puppeteer-core
+// We'll need to manually apply stealth techniques
 
 // Add stealth plugin to puppeteer
 puppeteer.use(StealthPlugin());
@@ -53,8 +57,11 @@ const downloadYouTubeAudioWithPuppeteer = async (videoId) => {
     const outputPath = path.join(tempDir, `audio_${Date.now()}.mp3`);
     const videoUrl = `https://www.youtube.com/watch?v=${videoId}`;
     
-    // Launch browser with stealth mode
+    // Launch browser with puppeteer-core
     const browser = await puppeteer.launch({
+      executablePath: process.env.NODE_ENV === 'production' 
+        ? '/usr/bin/google-chrome'  // Path to Chrome on Render
+        : process.env.CHROME_PATH || '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome', // Local Chrome path
       headless: true,
       args: [
         '--no-sandbox',
@@ -476,6 +483,9 @@ const downloadYouTubeAudioWithProxy = async (videoId) => {
       const downloadUrl = `https://ytmp3.cc/download/?url=https://www.youtube.com/watch?v=${videoId}`;
       
       const browser = await puppeteer.launch({
+        executablePath: process.env.NODE_ENV === 'production' 
+          ? '/usr/bin/google-chrome'  // Path to Chrome on Render
+          : process.env.CHROME_PATH || '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome', // Local Chrome path
         headless: true,
         args: [
           '--no-sandbox',

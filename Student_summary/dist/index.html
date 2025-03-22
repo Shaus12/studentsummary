@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>TachlesAI</title>
+    <link rel="icon" type="image/webp" href="/tachleslogo-removebg-preview.png">
+    <meta name="service-worker-allowed" content="false">
+    <script>
+      // Prevent service worker registration
+      if ('serviceWorker' in navigator) {
+        navigator.serviceWorker.getRegistrations().then(function(registrations) {
+          for(let registration of registrations) {
+            registration.unregister();
+          }
+        });
+        
+        // Override serviceWorker registration
+        navigator.serviceWorker.register = function() {
+          console.warn('Service Worker registration prevented');
+          return Promise.reject('Service Worker registration prevented');
+        };
+      }
+    </script>
+    <script type="module" crossorigin src="/assets/index-DI9esuxh.js"></script>
+    <link rel="stylesheet" crossorigin href="/assets/index-CEaGewsz.css">
+  </head>
+  <body>
+    <div id="root"></div>
+    <!-- <script src="nagishli_beta.js"></script> -->
+  </body>
+</html>

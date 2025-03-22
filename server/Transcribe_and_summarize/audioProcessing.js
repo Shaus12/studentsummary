@@ -1,6 +1,6 @@
 import { createClient } from '@deepgram/sdk';
 import { GoogleGenerativeAI } from '@google/generative-ai';
-import puppeteer from 'puppeteer';
+import puppeteer from 'puppeteer-core';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
@@ -183,7 +183,9 @@ export async function generatePDF(content) {
     
     // Launch browser
     const browser = await puppeteer.launch({
-      headless: 'new',
+      executablePath: process.env.NODE_ENV === 'production' 
+        ? '/usr/bin/google-chrome'  // Path to Chrome on Render
+        : puppeteer.executablePath(), // Local path during development
       args: ['--no-sandbox', '--disable-setuid-sandbox']
     });
     

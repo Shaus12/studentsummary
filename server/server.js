@@ -14,6 +14,7 @@ import { createClient } from '@deepgram/sdk';
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import fs from 'fs';
 import { v4 as uuidv4 } from 'uuid';
+import { PORT, isDevelopment, BASE_URL, ALLOWED_ORIGINS } from './config.js';
 
 // Import the working audio processing functions
 import { transcribeAudio, summarizeText, generatePDF } from './Transcribe_and_summarize/audioProcessing.js';
@@ -36,21 +37,14 @@ const __dirname = path.dirname(__filename);
 dotenv.config();
 
 const app = express();
-const PORT = process.env.PORT || 5001;
 
-// Update CORS configuration
-const allowedOrigins = [
-  'http://localhost:3000',
-  'http://localhost:5173',
-  'https://tachlesai.com'
-];
-
+// Then update the CORS configuration
 app.use(cors({
   origin: function(origin, callback) {
     // Allow requests with no origin
     if (!origin) return callback(null, true);
     
-    if (allowedOrigins.indexOf(origin) !== -1 || process.env.NODE_ENV === 'development') {
+    if (ALLOWED_ORIGINS.indexOf(origin) !== -1 || isDevelopment) {
       callback(null, true);
     } else {
       callback(new Error('Not allowed by CORS'));
@@ -429,7 +423,7 @@ app.post('/api/upload-audio', upload.single('audioFile'), async (req, res) => {
     await cleanupFile(req.file.path);
     
     // Send the response
-    const fullPdfUrl = `http://localhost:5001${pdfPath}`;
+    const fullPdfUrl = `${BASE_URL}${pdfPath}`;
     res.json({
       success: true,
       summary: result.summary,
@@ -514,10 +508,11 @@ app.post('/api/process-audio', upload.any(), async (req, res) => {
     console.log('File processed successfully');
     
     // Return the summary and pdfPath directly
+    const fullPdfUrl = `${BASE_URL}${pdfPath}`;
     res.json({ 
       success: true,
       summary: summary,
-      pdfPath: relativePdfPath
+      pdfPath: fullPdfUrl
     });
     
   } catch (error) {
@@ -750,6 +745,17 @@ app.get('/api/download-pdf/:filename', async (req, res) => {
     res.status(500).send('Error downloading PDF');
   }
 });
+
+// Then later in your code, add this production check
+if (process.env.NODE_ENV === "production") {
+  // Serve static files from the build directory
+  app.use(express.static(path.join(__dirname, '../Student_summary/dist')));
+  
+  // Handle React routing, return all requests to React app
+  app.get('*', (req, res) => {
+    res.sendFile(path.join(__dirname, '../Student_summary/dist/index.html'));
+  });
+}
 
 // Start the server
 app.listen(PORT, () => {
