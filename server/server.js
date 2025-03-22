@@ -746,27 +746,34 @@ app.get('/api/download-pdf/:filename', async (req, res) => {
   }
 });
 
-// Define the path to the React build directory
-const clientBuildPath = path.join(__dirname, '..', 'Student_summary', 'dist');
+// Simplify static file serving
+app.use(express.static(path.join(__dirname, '..', 'Student_summary', 'dist')));
 
-// Serve static files from the React app build directory
-app.use(express.static(clientBuildPath));
-
-// Explicitly serve the assets directory with the correct MIME types
-app.use('/assets', express.static(path.join(clientBuildPath, 'assets'), {
-  setHeaders: (res, path) => {
-    if (path.endsWith('.css')) {
-      res.setHeader('Content-Type', 'text/css');
-    } else if (path.endsWith('.js')) {
-      res.setHeader('Content-Type', 'application/javascript');
-    }
-  }
-}));
-
-// For any other request, send the React app's index.html
-app.get('*', (req, res) => {
-  res.sendFile(path.join(clientBuildPath, 'index.html'));
+// Add a test route
+app.get('/api/test', (req, res) => {
+  res.json({ message: 'Server is working!' });
 });
+
+// Log the structure of the dist directory
+const distPath = path.join(__dirname, '..', 'Student_summary', 'dist');
+console.log('Checking dist directory:', distPath);
+
+if (fs.existsSync(distPath)) {
+  console.log('Dist directory exists');
+  const files = fs.readdirSync(distPath);
+  console.log('Files in dist directory:', files);
+  
+  const assetsPath = path.join(distPath, 'assets');
+  if (fs.existsSync(assetsPath)) {
+    console.log('Assets directory exists');
+    const assetFiles = fs.readdirSync(assetsPath);
+    console.log('Files in assets directory:', assetFiles);
+  } else {
+    console.log('Assets directory does not exist');
+  }
+} else {
+  console.log('Dist directory does not exist');
+}
 
 // Start the server
 app.listen(PORT, () => {
