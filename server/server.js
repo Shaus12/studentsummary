@@ -38,21 +38,36 @@ dotenv.config();
 
 const app = express();
 
-// Then update the CORS configuration
-app.use(cors({
-  origin: function(origin, callback) {
-    // Allow requests with no origin
-    if (!origin) return callback(null, true);
+// Define allowed origins
+const ALLOWED_ORIGINS = [
+  'http://localhost:5173',
+  'http://localhost:5001',
+  'http://localhost:3000',
+  'https://studentsummary.onrender.com',
+  'https://www.studentsummary.onrender.com'
+];
+
+// CORS configuration
+const corsOptions = {
+  origin: function (origin, callback) {
+    // Allow requests with no origin (like mobile apps, curl requests)
+    if (!origin) {
+      return callback(null, true);
+    }
     
-    if (ALLOWED_ORIGINS.indexOf(origin) !== -1 || isDevelopment) {
+    if (ALLOWED_ORIGINS.indexOf(origin) !== -1) {
       callback(null, true);
     } else {
+      console.error("Not allowed by CORS:", origin);
       callback(new Error('Not allowed by CORS'));
     }
   },
   credentials: true,
-  methods: ['GET', 'POST', 'OPTIONS']
-}));
+  optionsSuccessStatus: 200
+};
+
+// Apply CORS middleware
+app.use(cors(corsOptions));
 
 // Create temp directory if it doesn't exist
 const tempDir = path.join(__dirname, 'temp');
@@ -132,29 +147,32 @@ const checkAndUpdateUsage = async (userEmail) => {
   }
 };
 
-// Simplified setup function
-const setupMembershipColumn = async () => {
+// Setup membership column in users table
+async function setupMembershipColumn() {
   try {
-    // Create enum type if it doesn't exist
-    await db.query(`
-      DO $$ BEGIN
-        CREATE TYPE membership_status AS ENUM ('free', 'premium');
-      EXCEPTION
-        WHEN duplicate_object THEN null;
-      END $$;
-    `);
-
-    // Add only membership_type column
-    await db.query(`
-      ALTER TABLE users 
-      ADD COLUMN IF NOT EXISTS membership_type membership_status DEFAULT 'free'
+    // Check if the membership_type column exists
+    const checkColumnResult = await db.query(`
+      SELECT column_name 
+      FROM information_schema.columns 
+      WHERE table_name = 'users' AND column_name = 'membership_type'
     `);
     
-    console.log('Membership column added to users table');
+    // If the column doesn't exist, add it
+    if (checkColumnResult.rows.length === 0) {
+      console.log('Adding membership_type column to users table');
+      await db.query(`
+        ALTER TABLE users 
+        ADD COLUMN membership_type VARCHAR(20) DEFAULT 'free' NOT NULL
+      `);
+      console.log('membership_type column added successfully');
+    } else {
+      console.log('membership_type column already exists');
+    }
   } catch (error) {
     console.error('Error setting up membership column:', error);
+    // Continue execution even if there's an error
   }
-};
+}
 
 // Simplified upgrade endpoint
 app.post("/api/upgrade-membership", async (req, res) => {
@@ -749,10 +767,10 @@ app.get('/api/download-pdf/:filename', async (req, res) => {
 // Define the path to the React build directory
 const distPath = path.join(__dirname, '..', 'Student_summary', 'dist');
 
-// Serve static files with explicit MIME types
-app.use('/assets', (req, res, next) => {
-  const filePath = path.join(distPath, 'assets', req.path);
-  console.log('Requested asset:', req.path);
+// Serve assets with explicit MIME types
+app.get('/assets/:file', (req, res) => {
+  const filePath = path.join(distPath, 'assets', req.params.file);
+  console.log('Requested asset:', req.params.file);
   console.log('Full path:', filePath);
   
   if (fs.existsSync(filePath)) {
@@ -771,7 +789,7 @@ app.use('/assets', (req, res, next) => {
     res.sendFile(filePath);
   } else {
     console.log('Asset file does not exist');
-    next();
+    res.status(404).send('Asset not found');
   }
 });
 
