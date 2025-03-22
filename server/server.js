@@ -391,7 +391,7 @@ app.post("/api/process-youtube", async (req, res) => {
 app.post('/api/upload-audio', upload.single('audioFile'), async (req, res) => {
   try {
     console.log('Audio processing request received');
-    console.log('Files:', req.file);
+    console.log('Files:', req.files);
     console.log('Body:', req.body);
     
     if (!req.file) {
@@ -401,61 +401,36 @@ app.post('/api/upload-audio', upload.single('audioFile'), async (req, res) => {
     console.log('File uploaded for processing:', req.file);
     console.log('Starting to process file:', req.file.path);
     
-    // Process the uploaded file using the working implementation
-    const transcript = await transcribeAudio(req.file.path);
-    console.log(`Transcript received, length: ${transcript.length}`);
-    
-    const summary = await summarizeText(transcript);
-    console.log(`Summary generated, length: ${summary.length}`);
-    
-    // Generate PDF if requested
-    let pdfPath = null;
-    if (req.body.outputType === 'pdf') {
-      pdfPath = await generatePDF(summary);
+    // Extract options if provided
+    let options = {};
+    if (req.body.options) {
+      try {
+        options = JSON.parse(req.body.options);
+        console.log('Processing options:', options);
+      } catch (e) {
+        console.error('Error parsing options:', e);
+      }
     }
     
-    const result = {
-      summary,
-      pdfPath,
-      method: 'upload'
-    };
-    
+    // Process the uploaded file
+    const result = await processUploadedFile(req.file.path, options);
     console.log('File processed successfully');
-    
-    // Get user ID from req.user (set by auth middleware)
-    const userId = req.user.id;
     
     // Save the result to the database
     console.log('Saving result to database');
-    const summaryResult = await db.query(
-      `INSERT INTO summaries (user_id, summary, created_at, file_name)
-       VALUES ($1, $2, NOW(), $3)
-       RETURNING id`,
-      [userId, result.summary, req.file.originalname]
-    );
-    
-    const summaryId = summaryResult.rows[0].id;
+    const userId = req.user.id;
+    const summaryId = await saveSummary(userId, result.summary, req.file.originalname);
     console.log('Summary saved with ID:', summaryId);
     
-    // Clean up the uploaded file
-    await cleanupFile(req.file.path);
-    
     // Send the response
-    const fullPdfUrl = `${BASE_URL}${pdfPath}`;
     res.json({
       success: true,
       summary: result.summary,
-      pdfPath: fullPdfUrl,
+      pdfPath: result.pdfPath,
       method: 'upload'
     });
   } catch (error) {
     console.error('Error processing audio file:', error);
-    
-    // Clean up the uploaded file if it exists
-    if (req.file && req.file.path) {
-      await cleanupFile(req.file.path);
-    }
-    
     res.status(500).json({ 
       error: 'Failed to process audio file', 
       details: error.message 
