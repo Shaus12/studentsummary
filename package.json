@@ -2,7 +2,7 @@
   "type": "module",
   "scripts": {
     "start": "node server/server.js",
-    "build": "npm install && cd Student_summary && npm install && npm run build && cd ..",
+    "build": "npm install && cd Student_summary && rm -rf node_modules && npm install && npm run build && cd ..",
     "dev": "nodemon server/server.js"
   },
   "dependencies": {
@@ -24,7 +24,6 @@
   },
   "devDependencies": {
     "@vitejs/plugin-react": "^4.3.4",
-    "nodemon": "^3.0.1",
-    "vite": "^6.2.0"
+    "nodemon": "^3.0.1"
   }
 }
